@@ -44,13 +44,15 @@ htmlcov/
 
 # Microsoft Teams Export Tool
 .token_cache.bin
+.env
 out/
+# Exclude output files but keep configuration files
 output.*
-# Exclude output files but keep requirements.txt
-*.json
-!requirements.txt
 output*.txt
 export*.txt
+export*.json
+chat*.json
+messages*.json
 
 # OS
 .DS_Store
