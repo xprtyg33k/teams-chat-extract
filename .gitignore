@@ -30,11 +30,11 @@ ENV/
 env/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
+# Keep .vscode for project configuration
 
 # Testing
 .pytest_cache/
