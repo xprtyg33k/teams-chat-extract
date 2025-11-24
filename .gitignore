@@ -36,6 +36,9 @@ env/
 *~
 # Keep .vscode for project configuration
 
+# specific scripts
+*.ps1
+
 # Testing
 .pytest_cache/
 .coverage
