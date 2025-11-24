@@ -14,7 +14,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote, unquote
 
 import msal
@@ -332,13 +332,20 @@ class GraphAPIClient:
 
         raise MaxRetriesExceeded("Max retries exceeded")
 
-    def _paginate(self, url: str, params: Optional[Dict[str, Any]] = None) -> Iterator[Dict[str, Any]]:
+    def _paginate(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        on_page: Optional[Callable[[int], None]] = None,
+    ) -> Iterator[Dict[str, Any]]:
         """
         Handle pagination for Graph API responses.
 
         Args:
             url: Initial URL
             params: Query parameters (only used for first request)
+            on_page: Optional callback invoked for each page with the number
+                of items returned in that page.
 
         Yields:
             Individual items from paginated response
@@ -351,6 +358,18 @@ class GraphAPIClient:
 
             # Yield items from current page
             items = response.get("value", [])
+
+            # Notify caller about page size, if requested
+            if on_page is not None:
+                try:
+                    on_page(len(items))
+                except Exception as callback_error:
+                    # Progress callbacks should never break pagination; log and continue.
+                    print_progress(
+                        f"Warning: on_page callback failed: {callback_error}",
+                        self.verbose,
+                    )
+
             for item in items:
                 yield item
 
@@ -411,7 +430,9 @@ class GraphAPIClient:
     def get_chat_messages(
         self,
         chat_id: str,
-        filter_query: Optional[str] = None
+        filter_query: Optional[str] = None,
+        orderby: Optional[str] = None,
+        on_page: Optional[Callable[[int], None]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get messages for a chat.
@@ -419,17 +440,30 @@ class GraphAPIClient:
         Args:
             chat_id: Chat ID
             filter_query: OData $filter query string
+            orderby: OData $orderby query string (required when using $filter)
+            on_page: Optional callback invoked for each page with the number
+                of messages returned in that page.
 
         Returns:
             List of message objects
+
+        Note:
+            According to Microsoft Graph API documentation, when using $filter,
+            you must also provide $orderby on the same property. For example:
+            - filter_query="lastModifiedDateTime gt 2025-01-01T00:00:00Z"
+            - orderby="lastModifiedDateTime desc"
         """
         params = {}
         if filter_query:
             params["$filter"] = filter_query
+        if orderby:
+            params["$orderby"] = orderby
 
         # Normalize and URL-encode the chat ID
         encoded_chat_id = self._normalize_chat_id(chat_id)
-        messages = list(self._paginate(f"/chats/{encoded_chat_id}/messages", params))
+        messages = list(
+            self._paginate(f"/chats/{encoded_chat_id}/messages", params, on_page=on_page)
+        )
         return messages
 
     def search_users(self, query: str) -> List[Dict[str, Any]]:
@@ -622,13 +656,30 @@ def get_chat_messages_filtered(
     print_progress(f"Retrieving messages for chat {chat_id}...", client.verbose)
 
     # Use server-side filtering on lastModifiedDateTime to reduce data transfer
-    # Note: Graph API has limitations on filtering by createdDateTime
+    # Note: Graph API requires $orderby when using $filter on the same property
     since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     until_str = until.strftime("%Y-%m-%dT%H:%M:%SZ")
-    filter_query = f"lastModifiedDateTime ge {since_str} and lastModifiedDateTime lt {until_str}"
+    filter_query = f"lastModifiedDateTime gt {since_str} and lastModifiedDateTime lt {until_str}"
+    orderby = "lastModifiedDateTime desc"
 
-    # Get messages with server-side filter
-    messages = client.get_chat_messages(chat_id, filter_query)
+    # Track and report pagination progress
+    total_messages = 0
+
+    def on_page(page_count: int) -> None:
+        nonlocal total_messages
+        total_messages += page_count
+        print_progress(
+            f"Retrieved {total_messages} messages so far...",
+            client.verbose,
+        )
+
+    # Get messages with server-side filter, required orderby, and page-level progress
+    messages = client.get_chat_messages(
+        chat_id,
+        filter_query,
+        orderby,
+        on_page=on_page,
+    )
 
     # Apply precise client-side filtering on createdDateTime
     filtered_messages = []
