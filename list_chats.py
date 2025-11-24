@@ -109,7 +109,7 @@ def print_filter_summary(filters):
 def main():
     """List all chats with their IDs and participants."""
 
-    # Generate default filename with timestamp
+    # Generate default filename with timestamp (used when --save-output-to is provided without value)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     default_filename = f"{timestamp}_all_of_my_chats_metadata.txt"
     default_path = str(Path.home() / "Documents" / default_filename)
@@ -119,8 +119,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # List only 1:1 chats (default)
-  python list_chats.py
+  # Console only (default - no file created)
+  python list_chats.py --chat-type meeting
+
+  # Save to default timestamped file in ~/Documents/
+  python list_chats.py --chat-type meeting --save-output-to
+
+  # Save to custom path
+  python list_chats.py --chat-type meeting --save-output-to "C:\\Files\\Artifacts\\meetings.txt"
 
   # List all chat types
   python list_chats.py --chat-type all
@@ -134,22 +140,19 @@ Examples:
   # Exclude chats with certain topics
   python list_chats.py --topic-exclude "Release;NLL;Standup"
 
-  # Combine filters
-  python list_chats.py --chat-type oneOnOne --topic-include "Project;Design"
+  # Combine filters and save output
+  python list_chats.py --chat-type oneOnOne --topic-include "Project;Design" --save-output-to
         """
     )
 
     # Output options
     parser.add_argument(
-        "--output",
-        "-o",
-        default=default_path,
-        help=f"Output file path (default: ~/Documents/{default_filename})"
-    )
-    parser.add_argument(
-        "--console-only",
-        action="store_true",
-        help="Only output to console, don't write to file"
+        "--save-output-to",
+        nargs='?',
+        const=default_path,
+        default=None,
+        metavar='PATH',
+        help=f"Save output to file. If no path provided, saves to ~/Documents/{default_filename}. If omitted, console only."
     )
 
     # Authentication
@@ -215,11 +218,11 @@ Examples:
 
     client = GraphAPIClient(access_token, verbose=False)
 
-    # Open output file if needed
+    # Open output file if --save-output-to was provided
     output_file = None
-    if not args.console_only:
+    if args.save_output_to is not None:
         try:
-            output_path = Path(args.output)
+            output_path = Path(args.save_output_to)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_file = open(output_path, 'w', encoding='utf-8')
             header = f"{'='*80}\nTeams Chats List\n{'='*80}\n\n"
@@ -245,6 +248,8 @@ Examples:
         except Exception as e:
             print(f"Warning: Could not open output file: {e}", file=sys.stderr)
             output_file = None
+    else:
+        print("Console output only (no file will be created)\n")
 
     chat_count = 0
     filtered_count = 0
@@ -301,7 +306,7 @@ Examples:
     finally:
         if output_file:
             output_file.close()
-            print(f"\nResults saved to: {Path(args.output).absolute()}")
+            print(f"\nResults saved to: {Path(args.save_output_to).absolute()}")
 
     return 0
 
