@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup: Install Dependencies",
+      "type": "shell",
+      "command": "pip install -r requirements.txt",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Lint: Run Ruff",
+      "type": "shell",
+      "command": "python -m ruff check teams_chat_export.py tests/",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Format: Run Black",
+      "type": "shell",
+      "command": "python -m black teams_chat_export.py tests/",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Test: Run Unit Tests",
+      "type": "shell",
+      "command": "python -m pytest tests/ -v --cov=teams_chat_export --cov-report=html --cov-report=term",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Clean: Remove Cache and Output",
+      "type": "shell",
+      "command": "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue __pycache__, .pytest_cache, .coverage, htmlcov, out, .token_cache.bin, output.*",
+      "windows": {
+        "command": "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue __pycache__, .pytest_cache, .coverage, htmlcov, out, .token_cache.bin, output.*"
+      },
+      "linux": {
+        "command": "rm -rf __pycache__ .pytest_cache .coverage htmlcov out .token_cache.bin output.*"
+      },
+      "osx": {
+        "command": "rm -rf __pycache__ .pytest_cache .coverage htmlcov out .token_cache.bin output.*"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}
+

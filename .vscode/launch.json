@@ -1,0 +1,70 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Export by Participants (JSON)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/teams_chat_export.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--tenant-id", "YOUR_TENANT_ID",
+        "--client-id", "YOUR_CLIENT_ID",
+        "--since", "2025-06-01",
+        "--until", "2025-11-15",
+        "--participants", "Alice Smith", "bob@contoso.com",
+        "--format", "json",
+        "--output", "./out/chat.json",
+        "--verbose"
+      ]
+    },
+    {
+      "name": "Export by Chat ID (TXT)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/teams_chat_export.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--tenant-id", "YOUR_TENANT_ID",
+        "--client-id", "YOUR_CLIENT_ID",
+        "--since", "2025-06-01",
+        "--until", "2025-11-15",
+        "--chat-id", "19:abc123@thread.v2",
+        "--format", "txt",
+        "--output", "./out/chat.txt",
+        "--verbose"
+      ]
+    },
+    {
+      "name": "Export Only My Messages",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/teams_chat_export.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--tenant-id", "YOUR_TENANT_ID",
+        "--client-id", "YOUR_CLIENT_ID",
+        "--since", "2025-06-01",
+        "--until", "2025-11-15",
+        "--participants", "Alice Smith",
+        "--only-mine",
+        "--format", "json",
+        "--output", "./out/my_messages.json",
+        "--verbose"
+      ]
+    },
+    {
+      "name": "Run Unit Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "console": "integratedTerminal",
+      "args": [
+        "tests/",
+        "-v",
+        "--cov=teams_chat_export"
+      ]
+    }
+  ]
+}
+
