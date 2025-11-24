@@ -46,8 +46,11 @@ htmlcov/
 .token_cache.bin
 out/
 output.*
+# Exclude output files but keep requirements.txt
 *.json
-*.txt
+!requirements.txt
+output*.txt
+export*.txt
 
 # OS
 .DS_Store
