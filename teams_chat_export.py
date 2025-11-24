@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import msal
 import requests
@@ -227,6 +227,35 @@ class GraphAPIClient:
         self.max_retries = MAX_RETRIES
         self.verbose = verbose
 
+    def _normalize_chat_id(self, chat_id: str) -> str:
+        """
+        Normalize and URL-encode chat ID for API requests.
+
+        Detects if the chat ID is already URL-encoded and decodes it first,
+        then re-encodes it properly. Provides user feedback if decoding was needed.
+
+        Args:
+            chat_id: Raw or URL-encoded chat ID
+
+        Returns:
+            Properly URL-encoded chat ID
+        """
+        # Check if the chat ID appears to be already URL-encoded
+        # by looking for percent-encoded characters
+        if '%' in chat_id:
+            # Decode it first
+            decoded = unquote(chat_id)
+            if decoded != chat_id:
+                print_progress(
+                    f"Note: Chat ID was URL-encoded. Using decoded value for proper encoding.\n"
+                    f"      In future, provide the unencoded chat ID from the Teams URL.",
+                    self.verbose
+                )
+                chat_id = decoded
+
+        # Now encode it properly for the API
+        return quote(chat_id, safe='')
+
     def _make_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Make HTTP request with retry logic and rate limiting.
@@ -354,8 +383,8 @@ class GraphAPIClient:
             Chat object
         """
         print_progress(f"Retrieving chat {chat_id}...", self.verbose)
-        # URL-encode the chat ID to handle special characters
-        encoded_chat_id = quote(chat_id, safe='')
+        # Normalize and URL-encode the chat ID
+        encoded_chat_id = self._normalize_chat_id(chat_id)
         return self._make_request(f"/chats/{encoded_chat_id}")
 
     def get_chat_members(self, chat_id: str) -> List[Dict[str, Any]]:
@@ -368,8 +397,8 @@ class GraphAPIClient:
         Returns:
             List of member objects
         """
-        # URL-encode the chat ID to handle special characters
-        encoded_chat_id = quote(chat_id, safe='')
+        # Normalize and URL-encode the chat ID
+        encoded_chat_id = self._normalize_chat_id(chat_id)
         members = list(self._paginate(f"/chats/{encoded_chat_id}/members"))
         return members
 
@@ -392,8 +421,8 @@ class GraphAPIClient:
         if filter_query:
             params["$filter"] = filter_query
 
-        # URL-encode the chat ID to handle special characters
-        encoded_chat_id = quote(chat_id, safe='')
+        # Normalize and URL-encode the chat ID
+        encoded_chat_id = self._normalize_chat_id(chat_id)
         messages = list(self._paginate(f"/chats/{encoded_chat_id}/messages", params))
         return messages
 
