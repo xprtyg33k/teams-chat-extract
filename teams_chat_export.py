@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import quote
 
 import msal
 import requests
@@ -353,7 +354,9 @@ class GraphAPIClient:
             Chat object
         """
         print_progress(f"Retrieving chat {chat_id}...", self.verbose)
-        return self._make_request(f"/chats/{chat_id}")
+        # URL-encode the chat ID to handle special characters
+        encoded_chat_id = quote(chat_id, safe='')
+        return self._make_request(f"/chats/{encoded_chat_id}")
 
     def get_chat_members(self, chat_id: str) -> List[Dict[str, Any]]:
         """
@@ -365,7 +368,9 @@ class GraphAPIClient:
         Returns:
             List of member objects
         """
-        members = list(self._paginate(f"/chats/{chat_id}/members"))
+        # URL-encode the chat ID to handle special characters
+        encoded_chat_id = quote(chat_id, safe='')
+        members = list(self._paginate(f"/chats/{encoded_chat_id}/members"))
         return members
 
     def get_chat_messages(
@@ -387,7 +392,9 @@ class GraphAPIClient:
         if filter_query:
             params["$filter"] = filter_query
 
-        messages = list(self._paginate(f"/chats/{chat_id}/messages", params))
+        # URL-encode the chat ID to handle special characters
+        encoded_chat_id = quote(chat_id, safe='')
+        messages = list(self._paginate(f"/chats/{encoded_chat_id}/messages", params))
         return messages
 
     def search_users(self, query: str) -> List[Dict[str, Any]]:
