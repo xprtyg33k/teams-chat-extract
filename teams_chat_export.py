@@ -307,7 +307,13 @@ class GraphAPIClient:
                     )
 
                 elif response.status_code == 404:
-                    raise NotFoundError(f"Resource not found: {url}")
+                    error_details = ""
+                    try:
+                        error_json = response.json()
+                        error_details = f"\nAPI Error: {error_json.get('error', {}).get('message', 'No details')}"
+                    except:
+                        pass
+                    raise NotFoundError(f"Resource not found: {url}{error_details}")
 
                 else:
                     response.raise_for_status()
