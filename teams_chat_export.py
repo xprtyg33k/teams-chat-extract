@@ -26,8 +26,7 @@ GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
 TOKEN_CACHE_FILE = ".token_cache.bin"
 SCOPES = [
     "Chat.Read",
-    "User.ReadBasic.All",
-    "offline_access"
+    "User.ReadBasic.All"
 ]
 MAX_RETRIES = 5
 DEFAULT_BACKOFF_BASE = 2  # seconds
