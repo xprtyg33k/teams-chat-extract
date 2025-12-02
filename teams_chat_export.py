@@ -637,7 +637,8 @@ def get_chat_messages_filtered(
     since: datetime,
     until: datetime,
     only_mine: bool = False,
-    my_user_id: Optional[str] = None
+    my_user_id: Optional[str] = None,
+    exclude_system_messages: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Retrieve messages for a chat with date filtering.
@@ -649,6 +650,7 @@ def get_chat_messages_filtered(
         until: End date (exclusive)
         only_mine: Only include messages from authenticated user
         my_user_id: Authenticated user's ID (required if only_mine=True)
+        exclude_system_messages: Exclude system event messages (member joins, renames, etc.)
 
     Returns:
         List of filtered message objects
@@ -693,6 +695,14 @@ def get_chat_messages_filtered(
         # Check date range (since inclusive, until exclusive)
         if not (since <= created_dt < until):
             continue
+
+        # Filter out system messages if requested
+        if exclude_system_messages:
+            body = msg.get("body", {})
+            body_content = body.get("content", "")
+            # System messages have body.content == "<systemEventMessage/>"
+            if body_content == "<systemEventMessage/>":
+                continue
 
         # Check author if only_mine is True
         if only_mine and my_user_id:
@@ -943,6 +953,11 @@ Examples:
         help="Only include messages from authenticated user"
     )
     parser.add_argument(
+        "--exclude-system-messages",
+        action="store_true",
+        help="Exclude system event messages (member joins, renames, etc.)"
+    )
+    parser.add_argument(
         "--format",
         choices=["json", "txt"],
         default="json",
@@ -1054,7 +1069,8 @@ Examples:
                 since,
                 until,
                 args.only_mine,
-                my_user_id
+                my_user_id,
+                args.exclude_system_messages
             )
 
             if not messages:
