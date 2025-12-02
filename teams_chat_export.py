@@ -739,7 +739,10 @@ def process_message(msg: Dict[str, Any]) -> Dict[str, Any]:
 
     # Extract sender info
     from_info = msg.get("from", {})
-    user_info = from_info.get("user", {}) if from_info else {}
+    user_info = from_info.get("user") if from_info else None
+    # Ensure user_info is a dict; handle None or missing user object
+    if not isinstance(user_info, dict):
+        user_info = {}
 
     return {
         "id": msg.get("id", ""),
