@@ -12,7 +12,7 @@ import os
 import random
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote, unquote
@@ -635,11 +635,11 @@ def get_chat_messages_filtered(
     client: GraphAPIClient,
     chat_id: str,
     since: datetime,
-    until: datetime,
+    until: Optional[datetime] = None,
     only_mine: bool = False,
     my_user_id: Optional[str] = None,
     exclude_system_messages: bool = False
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], datetime]:
     """
     Retrieve messages for a chat with date filtering.
 
@@ -647,20 +647,28 @@ def get_chat_messages_filtered(
         client: Graph API client
         chat_id: Chat ID
         since: Start date (inclusive)
-        until: End date (exclusive)
+        until: End date (exclusive). If None, exports all messages until the last message.
         only_mine: Only include messages from authenticated user
         my_user_id: Authenticated user's ID (required if only_mine=True)
         exclude_system_messages: Exclude system event messages (member joins, renames, etc.)
 
     Returns:
-        List of filtered message objects
+        Tuple of (filtered message list, actual until date used for filtering)
     """
     print_progress(f"Retrieving messages for chat {chat_id}...", client.verbose)
 
     # Use server-side filtering on lastModifiedDateTime to reduce data transfer
     # Note: Graph API requires $orderby when using $filter on the same property
     since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
-    until_str = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # If until is not provided, use a future date (year 2099) to fetch all messages
+    if until is None:
+        # Use a far future date to fetch all messages
+        future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+        until_str = future_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        until_str = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
     filter_query = f"lastModifiedDateTime gt {since_str} and lastModifiedDateTime lt {until_str}"
     orderby = "lastModifiedDateTime desc"
 
@@ -685,6 +693,8 @@ def get_chat_messages_filtered(
 
     # Apply precise client-side filtering on createdDateTime
     filtered_messages = []
+    max_message_dt = None  # Track the latest message date for auto-determining until
+    
     for msg in messages:
         created_str = msg.get("createdDateTime")
         if not created_str:
@@ -692,9 +702,18 @@ def get_chat_messages_filtered(
 
         created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
 
-        # Check date range (since inclusive, until exclusive)
-        if not (since <= created_dt < until):
-            continue
+        # Check date range: since inclusive, until exclusive (if specified)
+        if until is not None:
+            # Until specified: respect the boundary
+            if not (since <= created_dt < until):
+                continue
+        else:
+            # No until specified: include messages from since onwards
+            if created_dt < since:
+                continue
+            # Track the latest message date for auto-determining until
+            if max_message_dt is None or created_dt > max_message_dt:
+                max_message_dt = created_dt
 
         # Filter out system messages if requested
         if exclude_system_messages:
@@ -715,11 +734,23 @@ def get_chat_messages_filtered(
     # Sort by createdDateTime ascending
     filtered_messages.sort(key=lambda m: m.get("createdDateTime", ""))
 
+    # Determine the actual until date for export metadata
+    if until is not None:
+        # Until was specified, use it as-is
+        actual_until = until
+    elif filtered_messages and max_message_dt is not None:
+        # No until was specified, but we found messages
+        # Use the date of the last message + 1 second (since until is exclusive)
+        actual_until = max_message_dt.replace(microsecond=0) + timedelta(seconds=1)
+    else:
+        # No messages found, use current time
+        actual_until = datetime.now(timezone.utc)
+
     print_progress(
         f"Retrieved {len(filtered_messages)} messages in date range",
         client.verbose
     )
-    return filtered_messages
+    return filtered_messages, actual_until
 
 
 def process_message(msg: Dict[str, Any]) -> Dict[str, Any]:
@@ -890,7 +921,7 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Export by participants (Windows PowerShell)
+  # Export by participants with explicit date range (Windows PowerShell)
   python teams_chat_export.py `
     --tenant-id "12345678-1234-1234-1234-123456789abc" `
     --client-id "87654321-4321-4321-4321-cba987654321" `
@@ -900,7 +931,16 @@ Examples:
     --format json `
     --output ./out/chat.json
 
-  # Export by chat ID (macOS/Linux)
+  # Export all messages since a date (omit --until to export until last message)
+  python teams_chat_export.py `
+    --tenant-id "12345678-1234-1234-1234-123456789abc" `
+    --client-id "87654321-4321-4321-4321-cba987654321" `
+    --since "2025-06-01" `
+    --chat-id "19:abc123@thread.v2" `
+    --format txt `
+    --output ./out/chat.txt
+
+  # Export by chat ID with explicit date range (macOS/Linux)
   python3 teams_chat_export.py \\
     --tenant-id "12345678-1234-1234-1234-123456789abc" \\
     --client-id "87654321-4321-4321-4321-cba987654321" \\
@@ -930,8 +970,8 @@ Examples:
     )
     parser.add_argument(
         "--until",
-        required=True,
-        help="End date (YYYY-MM-DD, exclusive)"
+        required=False,
+        help="End date (YYYY-MM-DD, exclusive). If omitted, exports all messages until the last message in the chat."
     )
 
     # Chat selection (mutually exclusive)
@@ -980,13 +1020,15 @@ Examples:
         # Parse dates
         try:
             since = parse_date(args.since)
-            until = parse_date(args.until)
+            until = None
+            if args.until:
+                until = parse_date(args.until)
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return EXIT_ERROR
 
-        # Validate date range
-        if since >= until:
+        # Validate date range (if until is provided)
+        if until and since >= until:
             print("Error: --since must be before --until", file=sys.stderr)
             return EXIT_ERROR
 
@@ -1063,7 +1105,7 @@ Examples:
             print_progress(f"\nExporting chat: {chat_id} (type: {chat_type})", args.verbose)
 
             # Get messages
-            messages = get_chat_messages_filtered(
+            messages, actual_until = get_chat_messages_filtered(
                 client,
                 chat_id,
                 since,
@@ -1096,7 +1138,7 @@ Examples:
                 "chat_type": chat_type,
                 "participants": participants,
                 "date_range_start": since.isoformat(),
-                "date_range_end": until.isoformat(),
+                "date_range_end": actual_until.isoformat(),
                 "exported_at_utc": datetime.now(timezone.utc).isoformat(),
                 "message_count": len(processed_messages),
                 "messages": processed_messages
