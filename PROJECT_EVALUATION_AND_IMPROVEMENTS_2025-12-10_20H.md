@@ -9,6 +9,45 @@
 
 ## Recent Changes
 
+### ✅ IMPLEMENTED: Environment Variable Support for Credentials (2025-12-10 20:20 UTC)
+
+**What Changed**:
+- Both `teams_chat_export.py` and `list_chats.py` now support reading credentials from environment variables
+- Added `load_env_file()` utility function that parses `.env` files
+- Support for `TEAMS_TENANT_ID` and `TEAMS_CLIENT_ID` environment variables
+- Created `.env.example` file as template for user configuration
+- Removed hardcoded placeholder credentials from `list_chats.py`
+
+**Credential Precedence** (highest to lowest):
+1. CLI arguments (`--tenant-id`, `--client-id`)
+2. Environment variables (`TEAMS_TENANT_ID`, `TEAMS_CLIENT_ID`)
+3. `.env` file (loaded automatically if present)
+4. Validation error if none provided
+
+**Benefits**:
+- No need to paste credentials into every command
+- Credentials not visible in command history or process list
+- Same `.env` file works for both scripts
+- `.env` is already git-ignored for security
+
+**Setup**:
+```bash
+# 1. Create .env from template
+cp .env.example .env
+
+# 2. Edit .env with your credentials
+TEAMS_TENANT_ID=your-tenant-id
+TEAMS_CLIENT_ID=your-client-id
+
+# 3. Run scripts without CLI credentials
+python teams_chat_export.py --since 2025-06-01 --chat-id "19:abc@thread.v2"
+python list_chats.py --chat-type group
+```
+
+**Git Commit**: `e2fe4ab` - "Add environment variable support for credentials"
+
+---
+
 ### ✅ IMPLEMENTED: Optional --until Parameter (2025-12-10 20:15 UTC)
 
 **What Changed**:
@@ -52,27 +91,35 @@ This is a well-architected, production-ready Python CLI tool that exports Micros
 
 ## 1. Usability Improvements
 
-### 1.0 Optional --until Parameter ✅ COMPLETED
+### 1.0 Environment Variables for Credentials ✅ COMPLETED
 **Status**: Implemented (2025-12-10)  
-**Impact**: High - Simplifies common usage pattern
+**Impact**: High - Removes credential exposure, simplifies repeated usage
 
-This improvement has been completed and deployed. Users can now omit the `--until` parameter and the tool will automatically export all messages from `--since` until the last message in the chat.
+Both `teams_chat_export.py` and `list_chats.py` now support reading credentials from `.env` files via `TEAMS_TENANT_ID` and `TEAMS_CLIENT_ID` environment variables. Credentials no longer need to be passed via CLI (where they're visible in process lists and shell history).
 
 ---
 
-### 1.1 Configuration Management (High Priority)
-**Current State**: Credentials passed via CLI arguments  
-**Issue**: Verbose, error-prone, poor security for repeated invocations
+### 1.1 Optional --until Parameter ✅ COMPLETED
+**Status**: Implemented (2025-12-10)  
+**Impact**: High - Simplifies common usage pattern
+
+Users can now omit the `--until` parameter and the tool will automatically export all messages from `--since` until the last message in the chat.
+
+---
+
+### 1.2 Configuration File Support (Medium Priority)
+**Current State**: Credentials via CLI args or environment variables (now complete), but other options still CLI-only
+**Issue**: Would be useful to have YAML/TOML config files for output format, default filters, etc.
 
 **Recommendations**:
-- Add support for environment variables (`.env` file loading)
 - Implement config file support (YAML/TOML in `~/.config/teams-export/config.yaml`)
 - Add `--config` argument to specify custom config paths
-- Document credential precedence: CLI args > env vars > config file
+- Support per-project configuration files in current directory
+- Document configuration precedence: CLI args > env vars > config file
 
-**Benefits**: Reduce command line clutter, enable batch operations, improve security
+**Benefits**: Reduce command line clutter for complex operations, enable project-specific defaults
 
-### 1.2 Interactive Setup Wizard (Medium Priority)
+### 1.3 Interactive Setup Wizard (Medium Priority)
 **Current State**: Manual Azure app registration and credential input
 
 **Recommendations**:
@@ -83,7 +130,7 @@ This improvement has been completed and deployed. Users can now omit the `--unti
 
 **Benefits**: Lower barrier to entry, reduce setup errors
 
-### 1.3 Output Path Handling (Medium Priority)
+### 1.4 Output Path Handling (Medium Priority)
 **Current State**: Simple path generation with minimal validation
 
 **Recommendations**:
@@ -95,7 +142,7 @@ This improvement has been completed and deployed. Users can now omit the `--unti
 
 **Benefits**: Better batch operation support, prevent accidental overwrites
 
-### 1.4 Help & Documentation (Low Priority)
+### 1.5 Help & Documentation (Low Priority)
 **Current State**: Good docstrings and README
 
 **Recommendations**:
@@ -461,9 +508,15 @@ if cache_path.exists():
 
 ## 7. Recommended Implementation Roadmap
 
-**Implementation Status**: Phase 1 in progress - 1 of 4 improvements completed.
+**Implementation Status**: Phase 1 in progress - 2 of 4 improvements completed.
 
 ### Completed Items
+
+✅ **Environment Variable Support for Credentials**
+   - Status: Complete (Commit e2fe4ab)
+   - Both scripts now support TEAMS_TENANT_ID and TEAMS_CLIENT_ID environment variables
+   - Credentials no longer visible in command line or process list
+   - `.env.example` provided as setup template
 
 ✅ **Optional --until Parameter**
    - Status: Complete (Commit b8556a9)
