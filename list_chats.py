@@ -5,11 +5,17 @@ This helps identify the correct chat ID format for the export tool.
 """
 
 import argparse
+import io
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from teams_chat_export import authenticate, GraphAPIClient, load_env_file
+from teams_chat_export import authenticate, GraphAPIClient, load_env_file, clear_token_cache
+
+# Fix Windows console encoding issues with Unicode characters
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 def format_chat_info(chat_num, chat, members):
     """Format chat information as a string."""
@@ -195,6 +201,11 @@ Examples:
         "--participants",
         help="Include chats with these participants (semicolon-separated emails, OR logic)"
     )
+    parser.add_argument(
+        "--force-login",
+        action="store_true",
+        help="Force fresh authentication, clearing any cached tokens. Use when switching accounts or troubleshooting auth issues."
+    )
 
     args = parser.parse_args()
 
@@ -217,7 +228,12 @@ Examples:
 
     print("Authenticating...")
     try:
-        access_token = authenticate(args.tenant_id, args.client_id, verbose=True)
+        access_token = authenticate(
+            args.tenant_id,
+            args.client_id,
+            verbose=True,
+            force_login=args.force_login
+        )
     except Exception as e:
         print(f"Authentication failed: {e}", file=sys.stderr)
         return 1
@@ -265,6 +281,7 @@ Examples:
 
     chat_count = 0
     filtered_count = 0
+    meeting_access_denied_count = 0  # Track meeting chats with restricted access
 
     try:
         # Use the internal _paginate method to stream results
@@ -272,13 +289,26 @@ Examples:
         for chat in client._paginate("/me/chats"):
             total_processed += 1
             chat_id = chat.get('id', 'N/A')
+            chat_type = chat.get('chatType', 'unknown')
 
             # Get members (this is the slow part, but we do it per-chat as we go)
             members = None
             try:
                 members = client.get_chat_members(chat_id)
             except Exception as e:
-                print(f"  Warning: Could not get members for chat {chat_id}: {e}")
+                error_str = str(e)
+                # Silently count meeting chat access restrictions (known Graph API limitation)
+                if 'meeting_' in chat_id and ('InsufficientPrivileges' in error_str or 'Access denied' in error_str):
+                    meeting_access_denied_count += 1
+                    # For meeting chats, we can still show the chat but without members
+                    members = None
+                elif 'NotFound' in error_str or 'Resource not found' in error_str:
+                    # Chat no longer exists - skip silently
+                    filtered_count += 1
+                    continue
+                else:
+                    # Other errors - show warning
+                    print(f"  Warning: Could not get members for chat {chat_id}: {e}")
 
             # Apply filters
             if not matches_filters(chat, members, filters):
@@ -301,7 +331,10 @@ Examples:
         footer += f"Total chats found: {chat_count}\n"
         if filtered_count > 0:
             footer += f"Chats filtered out: {filtered_count}\n"
-            footer += f"Total chats processed: {total_processed}\n"
+        if meeting_access_denied_count > 0:
+            footer += f"Meeting chats with restricted access: {meeting_access_denied_count}\n"
+            footer += f"  (This is a known Microsoft Graph API limitation for meeting chats)\n"
+        footer += f"Total chats processed: {total_processed}\n"
         footer += f"{'='*80}\n"
         footer += "To export a specific chat, use the ID shown above with --chat-id\n"
         footer += f"{'='*80}\n"

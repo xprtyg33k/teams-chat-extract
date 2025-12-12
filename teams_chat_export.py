@@ -164,7 +164,45 @@ def save_token_cache(cache: msal.SerializableTokenCache) -> None:
             f.write(cache.serialize())
 
 
-def authenticate(tenant_id: str, client_id: str, verbose: bool = True) -> str:
+def clear_token_cache() -> None:
+    """Clear the token cache file."""
+    if os.path.exists(TOKEN_CACHE_FILE):
+        os.remove(TOKEN_CACHE_FILE)
+
+
+def validate_token(access_token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """
+    Validate access token by making a lightweight API call.
+
+    Args:
+        access_token: OAuth access token to validate
+
+    Returns:
+        Tuple of (is_valid, user_info) where user_info contains id and displayName
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json"
+        }
+        response = requests.get(
+            f"{GRAPH_API_BASE_URL}/me?$select=id,displayName,mail,userPrincipalName",
+            headers=headers,
+            timeout=30
+        )
+        if response.status_code == 200:
+            return True, response.json()
+        elif response.status_code == 401:
+            return False, None
+        else:
+            # Other errors might be temporary, assume token is valid
+            return True, None
+    except requests.RequestException:
+        # Network errors - can't determine validity
+        return True, None
+
+
+def authenticate(tenant_id: str, client_id: str, verbose: bool = True, force_login: bool = False) -> str:
     """
     Authenticate using MSAL device code flow.
 
@@ -172,6 +210,7 @@ def authenticate(tenant_id: str, client_id: str, verbose: bool = True) -> str:
         tenant_id: Azure AD tenant ID
         client_id: Application (client) ID
         verbose: Print progress messages
+        force_login: Force fresh authentication, clearing any cached tokens
 
     Returns:
         Access token string
@@ -182,8 +221,14 @@ def authenticate(tenant_id: str, client_id: str, verbose: bool = True) -> str:
     print_progress("Initializing authentication...", verbose)
 
     try:
-        # Load token cache
-        cache = load_token_cache()
+        # Clear cache if force_login is requested
+        if force_login:
+            print_progress("Force login requested - clearing cached tokens...", verbose)
+            clear_token_cache()
+            cache = msal.SerializableTokenCache()
+        else:
+            # Load token cache
+            cache = load_token_cache()
 
         # Create MSAL public client application
         authority = f"https://login.microsoftonline.com/{tenant_id}"
@@ -193,15 +238,25 @@ def authenticate(tenant_id: str, client_id: str, verbose: bool = True) -> str:
             token_cache=cache
         )
 
-        # Try to acquire token silently (using cached refresh token)
-        accounts = app.get_accounts()
-        if accounts:
-            print_progress("Attempting silent token acquisition...", verbose)
-            result = app.acquire_token_silent(SCOPES, account=accounts[0])
-            if result and "access_token" in result:
-                print_progress("Authentication successful (cached token)", verbose)
-                save_token_cache(cache)
-                return result["access_token"]
+        # Try to acquire token silently (using cached refresh token) - skip if force_login
+        if not force_login:
+            accounts = app.get_accounts()
+            if accounts:
+                print_progress("Attempting silent token acquisition...", verbose)
+                result = app.acquire_token_silent(SCOPES, account=accounts[0])
+                if result and "access_token" in result:
+                    # Validate the token is actually working
+                    is_valid, user_info = validate_token(result["access_token"])
+                    if is_valid:
+                        print_progress("Authentication successful (cached token)", verbose)
+                        if user_info:
+                            display_name = user_info.get("displayName", "Unknown")
+                            email = user_info.get("mail") or user_info.get("userPrincipalName", "Unknown")
+                            print_progress(f"Authenticated as: {display_name} ({email})", verbose)
+                        save_token_cache(cache)
+                        return result["access_token"]
+                    else:
+                        print_progress("Cached token is invalid/expired, re-authenticating...", verbose)
 
         # Fall back to device code flow
         print_progress("Starting device code flow...", verbose)
@@ -1048,6 +1103,11 @@ Examples:
         default=True,
         help="Verbose logging (default: True)"
     )
+    parser.add_argument(
+        "--force-login",
+        action="store_true",
+        help="Force fresh authentication, clearing any cached tokens. Use when switching accounts or troubleshooting auth issues."
+    )
 
     args = parser.parse_args()
 
@@ -1077,7 +1137,12 @@ Examples:
 
         # Authenticate
         try:
-            access_token = authenticate(args.tenant_id, args.client_id, args.verbose)
+            access_token = authenticate(
+                args.tenant_id,
+                args.client_id,
+                args.verbose,
+                force_login=args.force_login
+            )
         except AuthenticationError as e:
             print(f"Authentication error: {e}", file=sys.stderr)
             return EXIT_ERROR
