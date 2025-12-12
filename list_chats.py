@@ -5,10 +5,11 @@ This helps identify the correct chat ID format for the export tool.
 """
 
 import argparse
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from teams_chat_export import authenticate, GraphAPIClient
+from teams_chat_export import authenticate, GraphAPIClient, load_env_file
 
 def format_chat_info(chat_num, chat, members):
     """Format chat information as a string."""
@@ -109,6 +110,9 @@ def print_filter_summary(filters):
 def main():
     """List all chats with their IDs and participants."""
 
+    # Load environment variables from .env file
+    load_env_file()
+
     # Generate default filename with timestamp (used when --save-output-to is provided without value)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     default_filename = f"{timestamp}_all_of_my_chats_metadata.txt"
@@ -158,13 +162,13 @@ Examples:
     # Authentication
     parser.add_argument(
         "--tenant-id",
-        default="5a8e2b45-25f8-40ea-a914-b466436e9417",
-        help="Azure AD Tenant ID"
+        default=os.environ.get("TEAMS_TENANT_ID"),
+        help="Azure AD Tenant ID. Can also be set via TEAMS_TENANT_ID environment variable."
     )
     parser.add_argument(
         "--client-id",
-        default="0e2ae6dc-ea8b-40b0-8001-61e902fe42a0",
-        help="Application (Client) ID"
+        default=os.environ.get("TEAMS_CLIENT_ID"),
+        help="Application (Client) ID. Can also be set via TEAMS_CLIENT_ID environment variable."
     )
 
     # Filtering options
@@ -193,6 +197,14 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Validate required credentials are provided
+    if not args.tenant_id:
+        print("Error: --tenant-id must be provided via CLI argument or TEAMS_TENANT_ID environment variable", file=sys.stderr)
+        return 1
+    if not args.client_id:
+        print("Error: --client-id must be provided via CLI argument or TEAMS_CLIENT_ID environment variable", file=sys.stderr)
+        return 1
 
     # Parse filters
     filters = {

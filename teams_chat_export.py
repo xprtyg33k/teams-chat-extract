@@ -22,6 +22,36 @@ import requests
 from bs4 import BeautifulSoup
 import html2text
 
+
+def load_env_file(env_file: str = ".env") -> None:
+    """
+    Load environment variables from a .env file.
+    
+    Args:
+        env_file: Path to .env file (default: .env in current directory)
+    """
+    env_path = Path(env_file)
+    if not env_path.exists():
+        return
+    
+    try:
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                # Parse KEY=VALUE
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip().strip('\'"')  # Remove surrounding quotes
+                    # Only set if not already in environment
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+    except Exception as e:
+        print(f"Warning: Could not load .env file: {e}", file=sys.stderr)
+
 # Constants
 GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
 TOKEN_CACHE_FILE = ".token_cache.bin"
@@ -915,6 +945,9 @@ def main() -> int:
     Returns:
         Exit code
     """
+    # Load environment variables from .env file
+    load_env_file()
+
     # Parse arguments
     parser = argparse.ArgumentParser(
         description="Export Microsoft Teams chat messages",
@@ -955,13 +988,15 @@ Examples:
     # Required arguments
     parser.add_argument(
         "--tenant-id",
-        required=True,
-        help="Azure AD Tenant ID (UUID)"
+        required=False,
+        default=os.environ.get("TEAMS_TENANT_ID"),
+        help="Azure AD Tenant ID (UUID). Can also be set via TEAMS_TENANT_ID environment variable."
     )
     parser.add_argument(
         "--client-id",
-        required=True,
-        help="Application (Client) ID (UUID)"
+        required=False,
+        default=os.environ.get("TEAMS_CLIENT_ID"),
+        help="Application (Client) ID (UUID). Can also be set via TEAMS_CLIENT_ID environment variable."
     )
     parser.add_argument(
         "--since",
@@ -1015,6 +1050,14 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Validate required credentials are provided
+    if not args.tenant_id:
+        print("Error: --tenant-id must be provided via CLI argument or TEAMS_TENANT_ID environment variable", file=sys.stderr)
+        return EXIT_ERROR
+    if not args.client_id:
+        print("Error: --client-id must be provided via CLI argument or TEAMS_CLIENT_ID environment variable", file=sys.stderr)
+        return EXIT_ERROR
 
     try:
         # Parse dates
