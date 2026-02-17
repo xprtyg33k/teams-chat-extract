@@ -97,7 +97,7 @@ def print_progress(message: str, verbose: bool = True) -> None:
     """Print progress message to stderr."""
     if verbose:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        print(f"[{timestamp}] {message}", file=sys.stderr)
+        print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
 
 
 def parse_date(date_str: str) -> datetime:
@@ -268,11 +268,11 @@ def authenticate(tenant_id: str, client_id: str, verbose: bool = True, force_log
             )
 
         # Display device code instructions
-        print("\n" + "=" * 70, file=sys.stderr)
-        print("AUTHENTICATION REQUIRED", file=sys.stderr)
-        print("=" * 70, file=sys.stderr)
-        print(flow["message"], file=sys.stderr)
-        print("=" * 70 + "\n", file=sys.stderr)
+        print("\n" + "=" * 70, file=sys.stderr, flush=True)
+        print("AUTHENTICATION REQUIRED", file=sys.stderr, flush=True)
+        print("=" * 70, file=sys.stderr, flush=True)
+        print(flow["message"], file=sys.stderr, flush=True)
+        print("=" * 70 + "\n", file=sys.stderr, flush=True)
 
         # Wait for user to authenticate
         result = app.acquire_token_by_device_flow(flow)
