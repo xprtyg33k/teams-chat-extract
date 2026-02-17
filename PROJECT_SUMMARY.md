@@ -1,224 +1,178 @@
-# Microsoft Teams Chat Export Tool - Project Summary
+# Project Summary: Extract Teams Chat
 
-## Implementation Complete ✅
+## Overview
 
-This document provides a summary of the completed implementation of the Microsoft Teams Chat Export Tool.
+A Python utility suite for exporting Microsoft Teams chat messages to multiple formats (JSON, CSV, HTML) with flexible filtering and authentication options.
 
-## Project Overview
+**Current Version:** 1.0.0  
+**Last Updated:** February 17, 2026
 
-A production-ready Python command-line tool that exports Microsoft Teams chat messages (1:1 and group chats) using Microsoft Graph API with device code flow authentication.
+## Capabilities
 
-## Deliverables
+### Core Features
 
-### 1. Core Application (`teams_chat_export.py`) - 1,041 lines
+| Feature | Status | Details |
+|---------|--------|---------|
+| Export single chat | ✅ Complete | Via `--chat-id` parameter |
+| Export multiple chats | ✅ Complete | Via `--chat-ids` parameter (space-separated) |
+| Date filtering | ✅ Complete | Optional `--until` parameter (YYYY-MM-DD format) |
+| System message filtering | ✅ Complete | `--exclude-system-messages` flag |
+| JSON output | ✅ Complete | Default format with metadata |
+| CSV output | ✅ Complete | Flat structure for spreadsheet import |
+| HTML output | ✅ Complete | Self-contained, styled chat interface |
+| Chat discovery | ✅ Complete | `list_chats.py` with optional filtering |
+| Activity detection | ✅ Complete | `list_active_chats.py` with date/message filters |
+| Token caching | ✅ Complete | Automatic token persistence and reuse |
+| Force re-authentication | ✅ Complete | `--force-login` flag bypasses cache |
+| Environment variables | ✅ Complete | Support for `.env` and system environment vars |
 
-**Features Implemented:**
-- ✅ MSAL device code flow authentication with token caching
-- ✅ Microsoft Graph API client with pagination and retry logic
-- ✅ Exponential backoff with jitter for rate limiting (HTTP 429, 503, 504)
-- ✅ User resolution by display name or email (UPN)
-- ✅ Chat discovery by participants or explicit chat ID
-- ✅ Message retrieval with date filtering (server-side + client-side)
-- ✅ HTML to plain text conversion
-- ✅ JSON and TXT export formats
-- ✅ CLI with argparse (all required arguments)
-- ✅ Comprehensive error handling with informative messages
-- ✅ Type hints throughout
-- ✅ Progress indicators and verbose logging
+### Scripts Included
 
-**Key Classes and Functions:**
-- `GraphAPIClient` - HTTP client with pagination and retry logic
-- `authenticate()` - MSAL device code flow with token caching
-- `get_user_by_identifier()` - Resolve display name/email to user ID
-- `find_chats_by_participants()` - Find chats matching participant list
-- `get_chat_messages_filtered()` - Retrieve messages with date filtering
-- `process_message()` - Transform raw API response to export format
-- `html_to_text()` - Convert HTML body to plain text
-- `export_to_json()` - JSON exporter
-- `export_to_txt()` - Human-readable text exporter
-- `main()` - CLI entry point with argument parsing
+1. **`teams_chat_export.py`** (Main export tool)
+   - Single/multiple chat export
+   - Date range filtering
+   - Output format selection
+   - System message filtering
+   - Token management
 
-### 2. Unit Tests (5 test files, 40+ test cases)
+2. **`list_chats.py`** (Chat discovery)
+   - List all accessible chats
+   - Optional text filtering
+   - Display chat IDs in copyable format
+   - Sort options
 
-**Test Coverage:**
-- ✅ `test_date_parsing.py` - Date parsing with various formats and edge cases
-- ✅ `test_html_conversion.py` - HTML to text conversion
-- ✅ `test_graph_api_client.py` - API client with mocked HTTP responses
-- ✅ `test_message_processing.py` - Message transformation logic
-- ✅ `test_user_resolution.py` - User resolution and chat discovery
+3. **`list_active_chats.py`** (Activity filter)
+   - Filter chats by last activity date
+   - Minimum message threshold filtering
+   - JSON or text output
+   - Detailed activity metrics
 
-**Testing Tools:**
-- pytest for test execution
-- pytest-cov for coverage reporting
-- responses for HTTP mocking
-- pytest-mock for mocking
+4. **`auth_manager.py`** (Authentication)
+   - Azure AD token acquisition
+   - Token caching (file-based)
+   - Automatic token refresh
+   - Device code flow support
 
-### 3. Development Environment
+5. **`teams_api_client.py`** (API wrapper)
+   - Graph API integration
+   - Chat message retrieval
+   - Error handling and retries
+   - Pagination support
 
-**Dev Container:**
-- ✅ `.devcontainer/devcontainer.json` - VS Code Dev Container configuration
-- ✅ `.devcontainer/Dockerfile` - Python 3.11 container with dependencies
-- ✅ Non-root user (vscode)
-- ✅ Pre-installed dependencies
+## Configuration
 
-**VS Code Configuration:**
-- ✅ `.vscode/launch.json` - 4 debug configurations (by participants, by chat ID, only-mine, tests)
-- ✅ `.vscode/tasks.json` - 5 tasks (install, lint, format, test, clean)
-
-**Build Tools:**
-- ✅ `Makefile` - Common operations (setup, lint, format, test, clean)
-- ✅ `requirements.txt` - Pinned dependencies
-
-### 4. Documentation
-
-**README.md (470+ lines):**
-- ✅ Overview and features
-- ✅ Prerequisites (Azure app registration, permissions)
-- ✅ Security model explanation
-- ✅ Setup instructions (Dev Container + local venv)
-- ✅ Usage documentation with all arguments
-- ✅ 4 detailed examples (Windows PowerShell + macOS/Linux)
-- ✅ Output format specifications (JSON + TXT)
-- ✅ Troubleshooting guide (7 common scenarios)
-- ✅ Known limitations
-- ✅ Development instructions
-- ✅ Architecture diagram
-
-### 5. Configuration Files
-
-- ✅ `.gitignore` - Excludes venv, cache, tokens, output files
-- ✅ Git repository initialized with 7 commits
-
-## Git Commit History
+### Required Settings
 
 ```
-da3502d - Complete implementation: Add main script, comprehensive tests, README, and all configuration files
-198e390 - Add comprehensive README with setup instructions, usage examples, and troubleshooting guide
-b8e5663 - Add comprehensive unit tests for date parsing, HTML conversion, Graph API client, and message processing
-e1e43f8 - Implement core Teams chat export functionality with authentication, Graph API client, and export formatters
-90c07da - Add VS Code and devcontainer configuration files
-714ea1f - Add VS Code configuration (launch.json, tasks.json) and devcontainer.json
-9d538fe - Fix .gitignore to allow requirements.txt and add devcontainer.json
-6a50dfb - Initial project setup: dependencies, dev container, and Makefile
+TEAMS_CLIENT_ID: Azure AD application ID
+TEAMS_TENANT_ID: Azure AD tenant ID
 ```
 
-## Technical Highlights
+### Configuration Methods (in priority order)
 
-### Authentication
-- Device code flow with MSAL
-- Token cache persistence (`.token_cache.bin`)
-- Silent token acquisition with automatic refresh
-- No client secrets required
+1. `.env` file in project root
+2. Windows environment variables
+3. Command-line arguments
 
-### API Client
-- Automatic pagination handling (`@odata.nextLink`)
-- Exponential backoff: 2^attempt seconds + random jitter
-- Respects `Retry-After` header
-- Maximum 5 retry attempts
-- Comprehensive error handling (403, 404, 429, 503, 504)
-
-### Date Filtering
-- Server-side: `$filter` on `lastModifiedDateTime` (reduces data transfer)
-- Client-side: Precise filtering on `createdDateTime` (ensures accuracy)
-- UTC normalization for all timestamps
-- Inclusive `--since`, exclusive `--until`
-
-### Message Processing
-- HTML to plain text conversion (html2text + BeautifulSoup fallback)
-- Attachment metadata extraction
-- Sender information extraction
-- Chronological sorting
-
-### Export Formats
-- **JSON**: Structured data with full metadata
-- **TXT**: Human-readable with conversation headers
-
-## Dependencies
+### Example `.env`
 
 ```
-msal==1.31.0              # Microsoft Authentication Library
-requests==2.32.3          # HTTP client
-html2text==2024.2.26      # HTML to text conversion
-beautifulsoup4==4.12.3    # HTML parsing (fallback)
-lxml==5.3.0               # XML/HTML parser
-pytest==8.3.3             # Testing framework
-pytest-cov==6.0.0         # Test coverage
-pytest-mock==3.14.0       # Mocking for tests
-responses==0.25.3         # HTTP mocking
+TEAMS_CLIENT_ID=0e2ae6dc-ea8b-40b0-8001-61e902fe42a0
+TEAMS_TENANT_ID=5a8e2b45-25f8-40ea-a914-b466436e9417
 ```
 
-## Usage Examples
+## Command Reference
 
-### Export by Participants
-```powershell
-python teams_chat_export.py `
-  --tenant-id "12345678-1234-1234-1234-123456789abc" `
-  --client-id "87654321-4321-4321-4321-cba987654321" `
-  --since "2025-06-01" `
-  --until "2025-11-15" `
-  --participants "Alice Smith" "bob@contoso.com" `
-  --format json `
-  --output ./out/chat.json
-```
+### Export Chat
 
-### Export by Chat ID
 ```bash
-python3 teams_chat_export.py \
-  --tenant-id "12345678-1234-1234-1234-123456789abc" \
-  --client-id "87654321-4321-4321-4321-cba987654321" \
-  --since "2025-06-01" \
-  --until "2025-11-15" \
-  --chat-id "19:abc123@thread.v2" \
-  --format txt \
-  --output ./out/chat.txt
+# Basic export
+python teams_chat_export.py --chat-id "chatid@thread.v2"
+
+# With date limit (optional)
+python teams_chat_export.py --chat-id "chatid@thread.v2" --until "2026-02-17"
+
+# Exclude system messages
+python teams_chat_export.py --chat-id "chatid@thread.v2" --exclude-system-messages
+
+# Custom output format
+python teams_chat_export.py --chat-id "chatid@thread.v2" --output-format csv
+
+# Multiple chats
+python teams_chat_export.py --chat-ids "chat1@thread.v2" "chat2@thread.v2"
+
+# Force re-authentication
+python teams_chat_export.py --chat-id "chatid@thread.v2" --force-login
 ```
 
-## Testing
+### Discover Chats
 
-Run tests with:
 ```bash
-pytest tests/ -v --cov=teams_chat_export --cov-report=html
+# List all chats
+python list_chats.py
+
+# Filter by text
+python list_chats.py --filter "project"
+
+# Display chat IDs
+python list_chats.py --display-ids
 ```
 
-## Project Statistics
+### Find Active Chats
 
-- **Total Lines of Code**: ~1,500+ (main script + tests)
-- **Test Files**: 5
-- **Test Cases**: 40+
-- **Documentation**: 470+ lines (README)
-- **Git Commits**: 7
-- **Dependencies**: 9 (5 runtime + 4 testing)
+```bash
+# Active in last 7 days (default)
+python list_active_chats.py
 
-## Acceptance Criteria Status
+# Active in last 30 days
+python list_active_chats.py --days-back 30
 
-✅ **Participant-based export** - Implemented and tested  
-✅ **Chat ID export** - Implemented and tested  
-✅ **Pagination handling** - Implemented with `@odata.nextLink`  
-✅ **Rate limiting** - Exponential backoff with jitter  
-✅ **Only-mine filter** - Implemented  
-✅ **No matches handling** - Exit code 2  
-✅ **Permission errors** - Clear error messages  
-✅ **Date boundaries** - Inclusive since, exclusive until  
+# With minimum message count
+python list_active_chats.py --days-back 30 --min-messages 10
 
-## Next Steps (Optional Enhancements)
+# JSON output
+python list_active_chats.py --output-format json
+```
 
-1. **Run integration tests** with real Azure credentials
-2. **Add CI/CD pipeline** (GitHub Actions)
-3. **Add progress bars** (using tqdm)
-4. **Add message search** (filter by keyword)
-5. **Add export to CSV** format
-6. **Add batch export** (multiple chats at once)
-7. **Add incremental export** (only new messages since last export)
+## Documentation Files
 
-## Conclusion
+| File | Purpose |
+|------|---------|
+| `README.md` | Comprehensive guide with setup, usage, and troubleshooting |
+| `QUICKSTART.md` | 5-minute getting started guide |
+| `PROJECT_SUMMARY.md` | This file - features, configuration, and command reference |
 
-The Microsoft Teams Chat Export Tool is **production-ready** with:
-- Complete functionality as specified
-- Comprehensive error handling
-- Unit tests with good coverage
-- Detailed documentation
-- Reproducible development environment
-- Clean git history
+## Recent Updates (v1.0.0)
 
-All objectives have been met and the tool is ready for use.
+✅ Added `--exclude-system-messages` flag  
+✅ Added `--force-login` flag for re-authentication  
+✅ Made `--until` parameter optional  
+✅ Created `list_active_chats.py` utility  
+✅ Enhanced `list_chats.py` with filtering  
+✅ Added environment variable support  
+✅ Improved error messages and validation  
+
+## Known Limitations
+
+- Only text-based messages supported (no file attachments)
+- Requires Azure AD application registration
+- Token cache is user-specific and local to machine
+- System messages are included by default (use `--exclude-system-messages` to filter)
+
+## Requirements
+
+See `requirements.txt` for Python package dependencies.
+
+Key packages:
+- `azure-identity` - Azure AD authentication
+- `msgraph-core` - Microsoft Graph API client
+- `python-dotenv` - Environment variable management
+
+## Support
+
+For issues or questions:
+1. Check [QUICKSTART.md](QUICKSTART.md) for quick solutions
+2. Review [README.md](README.md) troubleshooting section
+3. Verify `.env` file configuration
+4. Try `--force-login` to reset authentication
 

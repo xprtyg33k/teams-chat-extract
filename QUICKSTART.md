@@ -1,174 +1,88 @@
 # Quick Start Guide
 
-Get started with the Teams Chat Export Tool in 5 minutes.
-
 ## Prerequisites
+- Python 3.8+
+- Microsoft Teams account
+- Azure AD application registered (see [README.md](README.md) for setup)
 
-1. **Azure App Registration** with:
-   - Tenant ID (UUID)
-   - Client ID (UUID)
-   - Delegated permissions: `Chat.Read`, `User.ReadBasic.All`, `offline_access`
-   - Admin consent granted
+## 1. Environment Setup
 
-2. **Python 3.11+** installed
+Create a `.env` file in the project root with your Azure AD credentials:
 
-## Setup (Choose One)
+```
+TEAMS_CLIENT_ID=your_client_id_here
+TEAMS_TENANT_ID=your_tenant_id_here
+```
 
-### Option A: Dev Container (Recommended)
+Or set environment variables:
 ```bash
-# Open in VS Code
-code .
-
-# Reopen in Container (F1 → "Dev Containers: Reopen in Container")
-# Dependencies install automatically
+set TEAMS_CLIENT_ID=your_client_id_here
+set TEAMS_TENANT_ID=your_tenant_id_here
 ```
 
-### Option B: Local Environment
+## 2. Basic Usage - Export a Chat
 
-**Windows PowerShell:**
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-**macOS/Linux:**
+### List Available Chats First
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python list_chats.py
 ```
 
-## Basic Usage
+This shows all chats you have access to with their IDs.
 
-### Export a 1:1 Chat
+### Export a Single Chat
+```bash
+python teams_chat_export.py --chat-id "chatid@thread.v2" --until "2026-02-17"
+```
+
+### Export Multiple Chats
+```bash
+python teams_chat_export.py --chat-ids "chat1@thread.v2" "chat2@thread.v2" --until "2026-02-17"
+```
+
+## 3. Common Options
+
+| Option | Purpose | Example |
+|--------|---------|---------|
+| `--chat-id` | Export single chat | `--chat-id "abc123@thread.v2"` |
+| `--chat-ids` | Export multiple chats | `--chat-ids "chat1@thread.v2" "chat2@thread.v2"` |
+| `--until` | Export up to date (optional) | `--until "2026-02-17"` |
+| `--exclude-system-messages` | Skip Teams system messages | `--exclude-system-messages` |
+| `--output-format` | Format: json, csv, or html | `--output-format json` |
+| `--force-login` | Bypass cached credentials | `--force-login` |
+
+## 4. Filter Active Chats by Activity
+
+```bash
+python list_active_chats.py --days-back 30 --min-messages 10
+```
+
+Find chats with activity in the last 30 days and at least 10 messages.
+
+## 5. Advanced: Export with Filters
 
 ```bash
 python teams_chat_export.py \
-  --tenant-id "YOUR_TENANT_ID" \
-  --client-id "YOUR_CLIENT_ID" \
-  --since "2025-06-01" \
-  --until "2025-11-15" \
-  --participants "colleague@company.com" \
-  --format json \
-  --output ./chat.json
+  --chat-id "chatid@thread.v2" \
+  --until "2026-02-17" \
+  --exclude-system-messages \
+  --output-format json \
+  --output-dir ./exports
 ```
 
-### Export a Group Chat by ID
+## 6. Troubleshooting
 
-```bash
-python teams_chat_export.py \
-  --tenant-id "YOUR_TENANT_ID" \
-  --client-id "YOUR_CLIENT_ID" \
-  --since "2025-06-01" \
-  --until "2025-11-15" \
-  --chat-id "19:abc123@thread.v2" \
-  --format txt \
-  --output ./chat.txt
-```
+**"Invalid credentials" error:**
+- Verify `.env` file exists and has correct `TEAMS_CLIENT_ID` and `TEAMS_TENANT_ID`
+- Or use `--force-login` to re-authenticate: `python teams_chat_export.py --chat-id "..." --force-login`
 
-## First Run
+**"Chat not found" error:**
+- Run `python list_chats.py` to find the correct chat ID
+- Chat IDs end with `@thread.v2`
 
-1. **Run the command** - The tool will display a device code
-2. **Open the URL** shown in your browser
-3. **Enter the code** displayed
-4. **Sign in** with your Microsoft account
-5. **Grant consent** if prompted
-6. **Wait** for the export to complete
-
-## Finding Chat IDs
-
-To get a chat ID:
-1. Open Teams in a web browser
-2. Navigate to the chat
-3. Look at the URL: `https://teams.microsoft.com/...conversations/19:abc123@thread.v2...`
-4. Copy the part that looks like `19:abc123@thread.v2`
-
-## Common Issues
-
-### "Authentication failed"
-- Verify Tenant ID and Client ID are correct
-- Ensure app is configured for device code flow
-
-### "Access denied"
-- Check that permissions are granted
-- Verify admin consent is complete
-- Ensure permissions are **delegated** (not application)
-
-### "No chats found"
-- Verify participant names/emails are correct
-- Try using email addresses instead of display names
-- Ensure you have a chat with those participants
-
-## Output Files
-
-- **JSON**: Structured data with full metadata
-- **TXT**: Human-readable conversation format
+**Token expired:**
+- Use `--force-login` flag to refresh authentication
 
 ## Next Steps
 
-- Read the full [README.md](README.md) for detailed documentation
-- Check [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) for implementation details
-- Run tests: `pytest tests/ -v`
-
-## Support
-
-For issues or questions, refer to the Troubleshooting section in [README.md](README.md).
-
-## Quick Reference
-
-### All Arguments
-
-```
-Required:
-  --tenant-id <UUID>        Azure AD Tenant ID
-  --client-id <UUID>        Application (Client) ID
-  --since <YYYY-MM-DD>      Start date (inclusive)
-  --until <YYYY-MM-DD>      End date (exclusive)
-
-Chat Selection (one required):
-  --participants <name/email> [...]   Find chats by participants
-  --chat-id <chat_id>                 Export specific chat
-
-Optional:
-  --only-mine               Only include your messages
-  --format {json|txt}       Output format (default: json)
-  --output <path>           Output file path
-  --verbose                 Verbose logging (default: True)
-```
-
-### Exit Codes
-
-- `0` - Success
-- `1` - Error (authentication, API, invalid input)
-- `2` - No matches found
-
-## Example Output
-
-### JSON
-```json
-{
-  "chat_id": "19:abc123@thread.v2",
-  "chat_type": "oneOnOne",
-  "participants": [...],
-  "message_count": 42,
-  "messages": [...]
-}
-```
-
-### TXT
-```
-================================================================================
-TEAMS CHAT EXPORT
-================================================================================
-
-Chat ID:        19:abc123@thread.v2
-Chat Type:      oneOnOne
-Participants:   Alice Smith (alice@contoso.com)
-...
-```
-
----
-
-**Ready to export?** Run your first command and start exporting Teams chats!
+See [README.md](README.md) for detailed configuration and advanced features.
 
