@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+  # FastAPI backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: teams-chat-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Mount .env as a secret or volume; uvicorn reads it via load_env_file()
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      # Mount .env for credentials (read-only)
+      - ./.env:/app/.env:ro
+      # Optional: mount source for hot-reload during development
+      - ./api:/app/api:ro
+      - ./cli:/app/cli:ro
+      - ./server.py:/app/server.py:ro
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/auth/status')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - teams-chat-network
+    restart: unless-stopped
+
+  # Static web frontend
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        API_URL: http://api:8000
+    container_name: teams-chat-web
+    ports:
+      - "8080:8080"
+    environment:
+      # Pass API URL to the build process
+      API_URL: http://api:8000
+      PYTHONUNBUFFERED: "1"
+    # volumes:
+    #   # Optional: mount web files for live editing during development
+    #   - ./web:/app/web:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import http.client; c=http.client.HTTPConnection('localhost', 8080, timeout=5); c.request('GET', '/'); exit(0 if c.getresponse().status == 200 else 1)" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - teams-chat-network
+    restart: unless-stopped
+
+networks:
+  teams-chat-network:
+    driver: bridge

@@ -1,0 +1,45 @@
+# Build stage: prepare static files and inject API_URL
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Copy web files
+COPY web/ ./web/
+
+# Default API URL for build time
+ARG API_URL=http://localhost:8000
+
+# Create a shell script to do the injection
+RUN echo '#!/bin/sh' > /tmp/inject.sh && \
+    echo 'python3 -c "' >> /tmp/inject.sh && \
+    echo 'import os' >> /tmp/inject.sh && \
+    echo 'api_url = os.environ.get(\"API_URL\", \"http://localhost:8000\")' >> /tmp/inject.sh && \
+    echo 'with open(\"web/index.html\", \"r\") as f: content = f.read()' >> /tmp/inject.sh && \
+    echo 'injection = f\"<script>window.API_BASE = \\\"{api_url}\\\";</script>\"' >> /tmp/inject.sh && \
+    echo 'content = content.replace(\"</head>\", f\"{injection}\\n</head>\")' >> /tmp/inject.sh && \
+    echo 'with open(\"web/index.html\", \"w\") as f: f.write(content)' >> /tmp/inject.sh && \
+    echo '"' >> /tmp/inject.sh && \
+    chmod +x /tmp/inject.sh && \
+    API_URL=${API_URL} /tmp/inject.sh
+
+# Runtime stage: serve static files
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy static files from builder
+COPY --from=builder /app/web /app/web
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Health check (try to access the index.html)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=2s --retries=3 \
+    CMD python -c "import http.client; c=http.client.HTTPConnection('localhost', 8080, timeout=5); c.request('GET', '/'); c.getresponse().status == 200 or exit(1)" || exit 1
+
+# Expose port
+EXPOSE 8080
+
+# Serve the static files using Python's built-in HTTP server
+CMD ["python", "-m", "http.server", "8080", "--directory", "/app/web"]

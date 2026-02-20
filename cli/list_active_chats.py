@@ -19,12 +19,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from teams_chat_export import authenticate, GraphAPIClient, load_env_file
+from .teams_chat_export import authenticate, GraphAPIClient, load_env_file
 
 # Fix Windows console encoding issues with Unicode characters
-if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# Only do this in main context, not when imported as a module
+if sys.platform == 'win32' and __name__ == '__main__':
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 def get_chat_last_activity(chat: Dict[str, Any]) -> Optional[datetime]:
@@ -255,7 +258,9 @@ Examples:
     # Generate output filename with today's date
     today = datetime.now()
     output_filename = f"All-Active-Chats-By-Last-Active-Date-As-Of-{today.strftime('%d%m%Y')}.txt"
-    output_path = Path(output_filename)
+    output_dir = Path("./out")
+    output_dir.mkdir(exist_ok=True)
+    output_path = output_dir / output_filename
     
     chats_data: List[Dict[str, Any]] = []
     chat_count = 0

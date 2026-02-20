@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teams Chat Export</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
+</head>
+<body>
+  <div id="app">
+    <!-- ─── Top Bar ────────────────────────────────────────────────── -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo">💬</span>
+        <h1>Teams Chat Export</h1>
+      </div>
+      <div class="topbar-right" id="userBadge"></div>
+    </header>
+
+    <!-- ─── Auth Gate (shown when not logged in) ───────────────────── -->
+    <section id="authGate" class="auth-gate hidden">
+      <div class="auth-card">
+        <div class="auth-icon">🔐</div>
+        <h2>Sign in with Microsoft</h2>
+        <p class="auth-subtitle">Authenticate via device code to access your Teams chats.</p>
+        <button id="btnStartLogin" class="btn btn-primary btn-lg">
+          Start Login
+        </button>
+
+        <div id="deviceCodePanel" class="device-code-panel hidden">
+          <p>Open <a id="deviceCodeLink" href="#" target="_blank" class="link">microsoft.com/devicelogin</a> and enter:</p>
+          <div class="code-display" id="deviceCode"></div>
+          <div class="spinner-inline" id="authSpinner">
+            <div class="spinner"></div>
+            <span>Waiting for authentication…</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Main Content (shown when logged in) ────────────────────── -->
+    <main id="mainContent" class="main hidden">
+      <!-- Sidebar / Actions -->
+      <aside class="sidebar">
+        <h3 class="sidebar-title">Actions</h3>
+
+        <div class="action-card" data-action="export_chat">
+          <div class="action-icon">📤</div>
+          <div class="action-info">
+            <strong>Export Chat</strong>
+            <span>Export messages from a specific chat</span>
+          </div>
+        </div>
+
+        <div class="action-card" data-action="list_chats">
+          <div class="action-icon">📋</div>
+          <div class="action-info">
+            <strong>List Chats</strong>
+            <span>Browse and filter your chats</span>
+          </div>
+        </div>
+
+        <div class="action-card" data-action="list_active_chats">
+          <div class="action-icon">🟢</div>
+          <div class="action-info">
+            <strong>Active Chats</strong>
+            <span>Find recently active chats</span>
+          </div>
+        </div>
+
+        <hr class="sidebar-divider" />
+
+        <div class="action-card" data-action="history">
+          <div class="action-icon">🕘</div>
+          <div class="action-info">
+            <strong>Run History</strong>
+            <span>View previous runs</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Centre Panel -->
+      <section class="centre">
+        <!-- ── Forms ── -->
+        <div id="panelForms" class="panel">
+          <!-- Export Chat Form -->
+          <form id="formExportChat" class="form-panel hidden" autocomplete="off">
+            <h2>Export Chat Messages</h2>
+            <div class="form-grid">
+              <label>Chat ID <span class="req">*</span>
+                <input type="text" name="chat_id" placeholder="19:xxxxxx@thread.v2" required />
+              </label>
+              <label>Since Date <span class="req">*</span>
+                <input type="date" name="since" required />
+              </label>
+              <label>Until Date
+                <input type="date" name="until" />
+              </label>
+              <label>Format
+                <select name="format">
+                  <option value="json">JSON</option>
+                  <option value="txt">Text</option>
+                </select>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="exclude_system_messages" />
+                Exclude system messages
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="only_mine" />
+                Only my messages
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Run Export</button>
+          </form>
+
+          <!-- List Chats Form -->
+          <form id="formListChats" class="form-panel hidden" autocomplete="off">
+            <h2>List Chats</h2>
+            <div class="form-grid">
+              <label>Chat Type
+                <select name="chat_type">
+                  <option value="all">All</option>
+                  <option value="oneOnOne" selected>1:1</option>
+                  <option value="group">Group</option>
+                  <option value="meeting">Meeting</option>
+                </select>
+              </label>
+              <label>Max Participants
+                <input type="number" name="max_participants" value="2" min="1" />
+              </label>
+              <label>Topic Includes <small>(comma-separated)</small>
+                <input type="text" name="topic_include" placeholder="project, review" />
+              </label>
+              <label>Topic Excludes <small>(comma-separated)</small>
+                <input type="text" name="topic_exclude" placeholder="standup, nll" />
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary">List Chats</button>
+          </form>
+
+          <!-- List Active Chats Form -->
+          <form id="formListActiveChats" class="form-panel hidden" autocomplete="off">
+            <h2>Active Chats</h2>
+            <div class="form-grid">
+              <label>Min Activity (days)
+                <input type="number" name="min_activity_days" value="365" min="0" />
+              </label>
+              <label>Max Meeting Participants
+                <input type="number" name="max_meeting_participants" value="10" min="0" />
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Find Active Chats</button>
+          </form>
+
+          <!-- Placeholder when no action selected -->
+          <div id="noActionSelected" class="empty-state">
+            <div class="empty-icon">👈</div>
+            <p>Select an action from the sidebar to get started.</p>
+          </div>
+        </div>
+
+        <!-- ── Progress ── -->
+        <div id="panelProgress" class="panel hidden">
+          <h2 id="progressTitle">Running…</h2>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+          </div>
+          <p class="progress-text" id="progressText">Starting…</p>
+        </div>
+
+        <!-- ── Results ── -->
+        <div id="panelResults" class="panel hidden">
+          <div class="results-header">
+            <h2>Results</h2>
+            <div class="results-actions">
+              <button id="btnDownload" class="btn btn-accent">⬇ Download</button>
+              <button id="btnNewRun" class="btn btn-secondary">+ New Run</button>
+            </div>
+          </div>
+
+          <!-- Summary Cards -->
+          <div id="summaryCards" class="summary-cards"></div>
+
+          <!-- Data Grid -->
+          <div class="grid-container">
+            <div class="grid-toolbar">
+              <input type="text" id="gridSearch" class="grid-search" placeholder="Search results…" />
+              <button id="btnCopyGrid" class="btn btn-sm btn-secondary">📋 Copy</button>
+            </div>
+            <div class="grid-wrapper">
+              <table id="resultsGrid" class="data-grid">
+                <thead id="gridHead"></thead>
+                <tbody id="gridBody"></tbody>
+              </table>
+            </div>
+            <div class="grid-footer">
+              <span id="gridInfo"></span>
+              <div class="grid-pagination">
+                <button id="btnPrev" class="btn btn-sm btn-secondary" disabled>‹ Prev</button>
+                <span id="pageInfo"></span>
+                <button id="btnNext" class="btn btn-sm btn-secondary" disabled>Next ›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── History ── -->
+        <div id="panelHistory" class="panel hidden">
+          <h2>Run History</h2>
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="js/api.js"></script>
+  <script type="module" src="js/storage.js"></script>
+  <script type="module" src="js/business.js"></script>
+  <script type="module" src="js/ui.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

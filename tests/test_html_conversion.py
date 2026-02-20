@@ -1,7 +1,7 @@
 """Tests for HTML to text conversion."""
 
 import pytest
-from teams_chat_export import html_to_text
+from cli.teams_chat_export import html_to_text
 
 
 class TestHtmlToText:

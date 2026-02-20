@@ -48,7 +48,12 @@ htmlcov/
 # Microsoft Teams Export Tool
 .token_cache.bin
 .env
+
+# Output files
 out/
+output*/
+out/
+
 # Exclude output files but keep configuration files
 output.*
 output*.txt

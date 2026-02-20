@@ -1,63 +1,75 @@
-# Project Summary: Extract Teams Chat
+# Project Summary: Teams Chat Export
 
 ## Overview
 
-A Python utility suite for exporting Microsoft Teams chat messages to multiple formats (JSON, CSV, HTML) with flexible filtering and authentication options.
+A full-stack tool for exporting Microsoft Teams chat messages.  The primary
+interface is a browser-based Web UI backed by a FastAPI REST server.  A set
+of CLI scripts is also available for headless/scripted use.
 
-**Current Version:** 1.0.0  
-**Last Updated:** February 17, 2026
+**Current Version:** 2.0.0
+**Last Updated:** February 20, 2026
+
+## Architecture
+
+```
+Browser (SPA)
+    └── business.js (orchestration layer)
+            └── api.js (HTTP client)
+                    └── FastAPI /api/* (server.py)
+                            ├── auth_manager.py   (MSAL device-code flow)
+                            ├── run_manager.py    (background threads)
+                            └── cli/teams_chat_export.py  (Graph API client)
+```
 
 ## Capabilities
+
 
 ### Core Features
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| Export single chat | ✅ Complete | Via `--chat-id` parameter |
-| Export multiple chats | ✅ Complete | Via `--chat-ids` parameter (space-separated) |
-| Date filtering | ✅ Complete | Optional `--until` parameter (YYYY-MM-DD format) |
-| System message filtering | ✅ Complete | `--exclude-system-messages` flag |
-| JSON output | ✅ Complete | Default format with metadata |
-| CSV output | ✅ Complete | Flat structure for spreadsheet import |
-| HTML output | ✅ Complete | Self-contained, styled chat interface |
-| Chat discovery | ✅ Complete | `list_chats.py` with optional filtering |
-| Activity detection | ✅ Complete | `list_active_chats.py` with date/message filters |
-| Token caching | ✅ Complete | Automatic token persistence and reuse |
-| Force re-authentication | ✅ Complete | `--force-login` flag bypasses cache |
-| Environment variables | ✅ Complete | Support for `.env` and system environment vars |
+| Web UI | ✅ Complete | Dark-themed SPA at `/`, served by FastAPI |
+| REST API | ✅ Complete | `GET`/`POST` endpoints under `/api` |
+| Background job execution | ✅ Complete | Threaded, polled via `run_id` token |
+| Real-time progress bar | ✅ Complete | 0–100% with message updates |
+| Results grid | ✅ Complete | Sortable, searchable, paginated, copy-to-clipboard |
+| File download | ✅ Complete | Served by `/api/runs/{id}/download` |
+| Run history | ✅ Complete | localStorage DB, merged with server state |
+| Export chat messages | ✅ Complete | Date range, JSON/TXT format, system-message filter |
+| List chats | ✅ Complete | Filter by type, topic, participant count |
+| Active chats | ✅ Complete | Sorted by last activity date |
+| Device-code auth | ✅ Complete | MSAL flow, token cached to `.token_cache.bin` |
+| CLI scripts | ✅ Complete | Independent of web server, same Graph client |
+| Unit tests (67) | ✅ Complete | pytest, 100% passing |
 
-### Scripts Included
+### Modules
 
-1. **`teams_chat_export.py`** (Main export tool)
-   - Single/multiple chat export
-   - Date range filtering
-   - Output format selection
-   - System message filtering
-   - Token management
+**API (`api/`)**
 
-2. **`list_chats.py`** (Chat discovery)
-   - List all accessible chats
-   - Optional text filtering
-   - Display chat IDs in copyable format
-   - Sort options
+| Module | Responsibility |
+|--------|---------------|
+| `routes.py` | FastAPI router — all `/api/*` endpoints |
+| `auth_manager.py` | MSAL device-code flow, token cache, session validation |
+| `run_manager.py` | Thread pool, job state store, result files |
+| `models.py` | Pydantic schemas for all requests and responses |
 
-3. **`list_active_chats.py`** (Activity filter)
-   - Filter chats by last activity date
-   - Minimum message threshold filtering
-   - JSON or text output
-   - Detailed activity metrics
+**Web (`web/js/`)**
 
-4. **`auth_manager.py`** (Authentication)
-   - Azure AD token acquisition
-   - Token caching (file-based)
-   - Automatic token refresh
-   - Device code flow support
+| Module | Responsibility |
+|--------|---------------|
+| `api.js` | Thin `fetch` wrappers for every API endpoint |
+| `storage.js` | localStorage persistence (auth info + run history DB) |
+| `business.js` | Orchestration, event bus, polling lifecycle |
+| `ui.js` | All DOM reads/writes — forms, grid, progress, history |
+| `app.js` | Bootstrap — wires business events to UI, binds listeners |
 
-5. **`teams_api_client.py`** (API wrapper)
-   - Graph API integration
-   - Chat message retrieval
-   - Error handling and retries
-   - Pagination support
+**CLI (`cli/`)**
+
+| Script | Responsibility |
+|--------|---------------|
+| `teams_chat_export.py` | Core Graph client, export logic, auth utilities |
+| `list_chats.py` | Chat discovery with filtering |
+| `list_active_chats.py` | Activity-sorted chat list |
 
 ## Configuration
 
@@ -70,7 +82,7 @@ TEAMS_TENANT_ID: Azure AD tenant ID
 
 ### Configuration Methods (in priority order)
 
-1. `.env` file in project root
+1. `.env` file in project root (mounted read-only in Docker)
 2. Windows environment variables
 3. Command-line arguments
 
@@ -81,98 +93,104 @@ TEAMS_CLIENT_ID=0e2ae6dc-ea8b-40b0-8001-61e902fe42a0
 TEAMS_TENANT_ID=5a8e2b45-25f8-40ea-a914-b466436e9417
 ```
 
+### Docker Deployment
+
+For Docker/Compose deployment, create `.env` in project root. The file is mounted as a read-only volume:
+
+```bash
+# Start both API and Web UI
+docker-compose up
+
+# With auto-rebuild
+docker-compose up --build
+
+# Run in background
+docker-compose up -d
+```
+
+See **[docs/DOCKER.md](docs/DOCKER.md)** for comprehensive deployment options.
+
 ## Command Reference
 
 ### Export Chat
 
 ```bash
 # Basic export
-python teams_chat_export.py --chat-id "chatid@thread.v2"
+python -m cli.teams_chat_export --chat-id "chatid@thread.v2" --since 2025-01-01
 
-# With date limit (optional)
-python teams_chat_export.py --chat-id "chatid@thread.v2" --until "2026-02-17"
+# With end date
+python -m cli.teams_chat_export --chat-id "chatid@thread.v2" --since 2025-01-01 --until 2025-12-31
 
 # Exclude system messages
-python teams_chat_export.py --chat-id "chatid@thread.v2" --exclude-system-messages
+python -m cli.teams_chat_export --chat-id "chatid@thread.v2" --since 2025-01-01 --exclude-system-messages
 
-# Custom output format
-python teams_chat_export.py --chat-id "chatid@thread.v2" --output-format csv
-
-# Multiple chats
-python teams_chat_export.py --chat-ids "chat1@thread.v2" "chat2@thread.v2"
+# Plain-text output
+python -m cli.teams_chat_export --chat-id "chatid@thread.v2" --since 2025-01-01 --format txt
 
 # Force re-authentication
-python teams_chat_export.py --chat-id "chatid@thread.v2" --force-login
+python -m cli.teams_chat_export --chat-id "chatid@thread.v2" --since 2025-01-01 --force-login
 ```
 
 ### Discover Chats
 
 ```bash
 # List all chats
-python list_chats.py
+python -m cli.list_chats
 
-# Filter by text
-python list_chats.py --filter "project"
-
-# Display chat IDs
-python list_chats.py --display-ids
+# Filter by type and topic
+python -m cli.list_chats --chat-type group --topic-include project
 ```
 
 ### Find Active Chats
 
 ```bash
-# Active in last 7 days (default)
-python list_active_chats.py
+# Active in last 365 days (default)
+python -m cli.list_active_chats
 
-# Active in last 30 days
-python list_active_chats.py --days-back 30
-
-# With minimum message count
-python list_active_chats.py --days-back 30 --min-messages 10
-
-# JSON output
-python list_active_chats.py --output-format json
+# Tighter window
+python -m cli.list_active_chats --min-activity-days 90
 ```
 
-## Documentation Files
+
+
+## Documentation
 
 | File | Purpose |
-|------|---------|
-| `README.md` | Comprehensive guide with setup, usage, and troubleshooting |
-| `QUICKSTART.md` | 5-minute getting started guide |
-| `PROJECT_SUMMARY.md` | This file - features, configuration, and command reference |
+|------|---------|  
+| `README.md` | Full architecture, setup, API overview, deployment options |
+| `QUICKSTART.md` | 5-minute Web UI getting-started guide (local or Docker) |
+| `PROJECT_SUMMARY.md` | This file — feature overview and module reference |
+| `cli/QUICKSTART.md` | CLI-specific quick start |
+| `docs/DOCKER.md` | Docker/Compose deployment guide with networking and troubleshooting |
+| `docs/` | Planning docs, investigation reports, daily logs |## Recent Updates (v2.0.0 — February 20, 2026)
 
-## Recent Updates (v1.0.0)
-
-✅ Added `--exclude-system-messages` flag  
-✅ Added `--force-login` flag for re-authentication  
-✅ Made `--until` parameter optional  
-✅ Created `list_active_chats.py` utility  
-✅ Enhanced `list_chats.py` with filtering  
-✅ Added environment variable support  
-✅ Improved error messages and validation  
+✅ FastAPI REST server (`server.py`)
+✅ Full Web UI — dark-themed SPA with auth gate, forms, progress, grid, history
+✅ Background job execution with `run_id` polling tokens
+✅ File download via API (results no longer written to `/out`)
+✅ localStorage run history DB with server-state merge
+✅ `api/` layer — clean separation of auth, run management, and routing
+✅ `web/js/` — layered frontend: api → storage → business → ui → app
+✅ All 67 existing unit tests continue to pass
+✅ **Docker containerization** — multi-stage builds, service networking, health checks
+✅ **Docker Compose orchestration** — one-command deployment with automatic API_URL injection
 
 ## Known Limitations
 
-- Only text-based messages supported (no file attachments)
-- Requires Azure AD application registration
-- Token cache is user-specific and local to machine
-- System messages are included by default (use `--exclude-system-messages` to filter)
+- File attachments are not exported (text content only)
+- Run history is in-memory server-side (resets on server restart); local history persists in browser
+- Token cache is machine-local (`.token_cache.bin`)
+- System messages are included in exports by default; use the checkbox/flag to exclude them
 
 ## Requirements
 
-See `requirements.txt` for Python package dependencies.
+See `requirements.txt` for all Python dependencies.
 
 Key packages:
-- `azure-identity` - Azure AD authentication
-- `msgraph-core` - Microsoft Graph API client
-- `python-dotenv` - Environment variable management
+- `fastapi` + `uvicorn` — web server
+- `msal` — Microsoft Authentication Library
+- `requests` — HTTP client for Graph API
+- `pydantic` — data validation
+- `html2text` / `beautifulsoup4` — HTML to plain-text conversion
 
-## Support
-
-For issues or questions:
-1. Check [QUICKSTART.md](QUICKSTART.md) for quick solutions
-2. Review [README.md](README.md) troubleshooting section
-3. Verify `.env` file configuration
-4. Try `--force-login` to reset authentication
 

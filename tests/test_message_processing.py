@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime, timezone
-from teams_chat_export import process_message
+from cli.teams_chat_export import process_message
 
 
 class TestMessageProcessing:

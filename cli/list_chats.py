@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from teams_chat_export import authenticate, GraphAPIClient, load_env_file, clear_token_cache
+from .teams_chat_export import authenticate, GraphAPIClient, load_env_file, clear_token_cache
 
 # Fix Windows console encoding issues with Unicode characters
 if sys.platform == 'win32':

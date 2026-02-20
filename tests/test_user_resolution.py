@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, MagicMock
-from teams_chat_export import (
+from cli.teams_chat_export import (
     get_user_by_identifier,
     find_chats_by_participants,
     NotFoundError,

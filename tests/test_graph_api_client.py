@@ -2,7 +2,7 @@
 
 import pytest
 import responses
-from teams_chat_export import (
+from cli.teams_chat_export import (
     GraphAPIClient,
     PermissionError,
     NotFoundError,
