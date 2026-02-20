@@ -6,13 +6,25 @@ Get the Teams Chat Export web interface running in under five minutes.
 
 - **Docker + Docker Compose** (easiest) OR Python 3.9+
 - A Microsoft Teams account
-- An Azure AD app registration — see [Azure AD Setup](#azure-ad-setup) below
+- A `TEAMS_TENANT_ID` and `TEAMS_CLIENT_ID` — see step 1 below
 
 ---
 
-## 1. Azure AD Setup
+## 1. Get your Azure AD credentials
 
-> Skip this if you already have a `.env` file with valid credentials.
+You need two values: a **Tenant ID** (identifies your organization) and a
+**Client ID** (identifies the app registration).  These are **not secrets** —
+they are safe to share with anyone in the same Azure AD tenant.
+
+> **Already have them?** If a coworker or admin has already registered the app,
+> ask them for the two IDs and skip straight to
+> [step 2 — Configure credentials](#2-configure-credentials).
+
+### First-time setup (one-time per organization)
+
+Only one person in your organization needs to do this.  Once complete, share the
+two IDs with your team — every user authenticates individually with their own
+Microsoft account.
 
 1. Go to **Azure Portal → App registrations → New registration**
 2. Name it (e.g. `TeamsExport`), choose **Single tenant**, click **Register**
@@ -20,7 +32,7 @@ Get the Teams Chat Export web interface running in under five minutes.
 4. Under **API permissions → Add permission → Microsoft Graph → Delegated**:
    - `Chat.Read`
    - `User.ReadBasic.All`
-5. Click **Grant admin consent** (or ask your admin to do so)
+5. Click **Grant admin consent** (or ask your tenant admin)
 
 ---
 
@@ -29,8 +41,8 @@ Get the Teams Chat Export web interface running in under five minutes.
 Create a `.env` file in the project root:
 
 ```
-TEAMS_CLIENT_ID=<your-application-client-id>
-TEAMS_TENANT_ID=<your-tenant-id>
+TEAMS_CLIENT_ID=<application-client-id>
+TEAMS_TENANT_ID=<tenant-id>
 ```
 
 ---

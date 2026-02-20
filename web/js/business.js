@@ -36,10 +36,12 @@ function _emit(event, data) {
 
 let _authInfo = null;
 let _pollTimer = null;
+let _authHeartbeat = null;
+const AUTH_HEARTBEAT_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Check if user is authenticated (server-side token valid).
- * Emits "auth:changed".
+ * Emits "auth:changed".  Also sets up an hourly heartbeat.
  */
 export async function checkAuth() {
   try {
@@ -52,6 +54,7 @@ export async function checkAuth() {
       };
       store.saveAuthInfo(_authInfo);
       _emit("auth:changed", { authenticated: true, ..._authInfo });
+      _scheduleAuthHeartbeat();
       return true;
     }
   } catch (e) {
@@ -60,6 +63,27 @@ export async function checkAuth() {
   _authInfo = null;
   _emit("auth:changed", { authenticated: false });
   return false;
+}
+
+/**
+ * Schedule a low-frequency auth heartbeat (once per hour).
+ * Replaces any previous heartbeat.
+ */
+function _scheduleAuthHeartbeat() {
+  if (_authHeartbeat) clearInterval(_authHeartbeat);
+  _authHeartbeat = setInterval(async () => {
+    try {
+      const status = await api.getAuthStatus();
+      if (!status.authenticated) {
+        _authInfo = null;
+        _emit("auth:changed", { authenticated: false });
+        clearInterval(_authHeartbeat);
+        _authHeartbeat = null;
+      }
+    } catch (_) {
+      /* ignore transient network errors */
+    }
+  }, AUTH_HEARTBEAT_MS);
 }
 
 /**
@@ -87,6 +111,10 @@ export async function forceLogin() {
 
 export async function doLogout() {
   stopLoginPoll();
+  if (_authHeartbeat) {
+    clearInterval(_authHeartbeat);
+    _authHeartbeat = null;
+  }
   _authInfo = null;
   store.clearAuthInfo();
   await api.logout();
@@ -129,11 +157,18 @@ const _runPollers = new Map(); // run_id → intervalId
 
 /**
  * Launch an action.  Returns the run object.
+ * Validates auth before starting.
  *
  * @param {"export_chat"|"list_chats"|"list_active_chats"} action
  * @param {object} params  – form data to send
  */
 export async function startRun(action, params) {
+  // Quick auth check before action (the only per-action ping)
+  const authed = await checkAuth();
+  if (!authed) {
+    throw new Error("Not authenticated – please sign in again.");
+  }
+
   let run;
   switch (action) {
     case "export_chat":
@@ -157,17 +192,18 @@ export async function startRun(action, params) {
 function _beginStatusPolling(runId) {
   // Clear existing poller for this run
   if (_runPollers.has(runId)) {
-    clearInterval(_runPollers.get(runId));
+    clearTimeout(_runPollers.get(runId));
   }
 
-  const id = setInterval(async () => {
+  let delay = 2000; // start at 2s, back off gradually
+
+  async function poll() {
     try {
       const status = await api.getRunStatus(runId);
       store.upsertRun({ run_id: runId, ...status });
       _emit("run:progress", { run_id: runId, ...status });
 
       if (status.status === "completed" || status.status === "failed" || status.status === "cancelled") {
-        clearInterval(id);
         _runPollers.delete(runId);
 
         if (status.status === "completed") {
@@ -182,13 +218,20 @@ function _beginStatusPolling(runId) {
         } else {
           _emit("run:failed", { run_id: runId, ...status });
         }
+        return; // stop polling
       }
     } catch (e) {
       console.warn("[business] status poll error:", e);
     }
-  }, 1500);
 
-  _runPollers.set(runId, id);
+    // Gradually increase poll interval (2s → 3s → 4s → max 5s)
+    delay = Math.min(delay + 500, 5000);
+    const tid = setTimeout(poll, delay);
+    _runPollers.set(runId, tid);
+  }
+
+  const tid = setTimeout(poll, delay);
+  _runPollers.set(runId, tid);
 }
 
 /**
@@ -215,6 +258,19 @@ export async function refreshHistory() {
 }
 
 /**
+ * Load results for a completed run (for viewing in the grid).
+ * Returns { summary, grid_data, grid_total } or null.
+ */
+export async function loadRunResults(runId) {
+  try {
+    return await api.getRunResults(runId);
+  } catch (e) {
+    console.warn("[business] loadRunResults error:", e);
+    return null;
+  }
+}
+
+/**
  * Get locally stored run history (no network call).
  */
 export function getLocalHistory() {
@@ -227,10 +283,10 @@ export function getLocalHistory() {
 export function getActions() {
   return [
     {
-      id: "export_chat",
-      label: "Export Chat",
-      icon: "📤",
-      description: "Export messages from a specific chat",
+      id: "list_active_chats",
+      label: "Active Chats",
+      icon: "🟢",
+      description: "Find recently active chats",
     },
     {
       id: "list_chats",
@@ -239,10 +295,10 @@ export function getActions() {
       description: "Browse and filter your chats",
     },
     {
-      id: "list_active_chats",
-      label: "Active Chats",
-      icon: "🟢",
-      description: "Find recently active chats",
+      id: "export_chat",
+      label: "Export Chat",
+      icon: "📤",
+      description: "Export messages from a specific chat",
     },
   ];
 }

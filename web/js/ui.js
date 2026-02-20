@@ -143,9 +143,50 @@ export function showForm(actionId) {
   const formKey = formMap[actionId];
   if (formKey && els[formKey]) {
     show(els[formKey]);
+    // Default the Since Date to 1 month ago when showing Export Chat
+    if (actionId === "export_chat") {
+      _setDefaultSinceDate();
+    }
   } else {
     show(els.noActionSelected);
   }
+}
+
+function _setDefaultSinceDate() {
+  const sinceInput = els.formExportChat.querySelector('input[name="since"]');
+  if (sinceInput && !sinceInput.value) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    sinceInput.value = _toDateString(d);
+  }
+}
+
+function _toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Shift a date input by the given delta string (e.g. "+1m", "-3m", "+1y", "-1y").
+ */
+export function shiftDateInput(targetName, shiftStr) {
+  const input = els.formExportChat.querySelector(`input[name="${targetName}"]`);
+  if (!input) return;
+
+  // Start from the current value, or today if empty
+  const base = input.value ? new Date(input.value + "T00:00:00") : new Date();
+  const sign = shiftStr.startsWith("-") ? -1 : 1;
+  const num = parseInt(shiftStr.replace(/[^0-9]/g, ""), 10);
+  const unit = shiftStr.slice(-1).toLowerCase();
+
+  if (unit === "m") {
+    base.setMonth(base.getMonth() + sign * num);
+  } else if (unit === "y") {
+    base.setFullYear(base.getFullYear() + sign * num);
+  }
+  input.value = _toDateString(base);
 }
 
 export function showHistoryPanel() {
@@ -300,12 +341,20 @@ function _summaryCard(label, value) {
 }
 
 function _renderGrid() {
+  // Detect chat_id column for row actions
+  const chatIdCol = _gridColumns.find(
+    (c) => c === "chat_id" || c === "ChatId" || c === "chatId"
+  );
+
   // Header
   let headHtml = "<tr>";
   for (const col of _gridColumns) {
     const arrow =
       _sortCol === col ? (_sortAsc ? "▲" : "▼") : '<span style="opacity:0.3">⇅</span>';
     headHtml += `<th data-col="${col}">${escapeHtml(col)} <span class="sort-arrow">${arrow}</span></th>`;
+  }
+  if (chatIdCol) {
+    headHtml += `<th class="grid-actions-col">Actions</th>`;
   }
   headHtml += "</tr>";
   els.gridHead.innerHTML = headHtml;
@@ -314,16 +363,26 @@ function _renderGrid() {
   const start = _page * PAGE_SIZE;
   const pageData = _gridFiltered.slice(start, start + PAGE_SIZE);
 
+  const colSpan = chatIdCol ? _gridColumns.length + 1 : _gridColumns.length;
   let bodyHtml = "";
   if (pageData.length === 0) {
-    bodyHtml = `<tr><td colspan="${_gridColumns.length}" style="text-align:center;padding:24px;color:var(--text-secondary)">No results</td></tr>`;
+    bodyHtml = `<tr><td colspan="${colSpan}" style="text-align:center;padding:24px;color:var(--text-secondary)">No results</td></tr>`;
   } else {
     for (const row of pageData) {
       bodyHtml += "<tr>";
       for (const col of _gridColumns) {
         let val = row[col];
         if (val == null) val = "";
-        bodyHtml += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
+        if (col === chatIdCol) {
+          // Render chat_id with copy icon
+          bodyHtml += `<td title="${escapeHtml(String(val))}"><span class="chat-id-cell">${escapeHtml(String(val))}<button class="btn-icon btn-copy-id" data-copy-id="${escapeHtml(String(val))}" title="Copy Chat ID">📋</button></span></td>`;
+        } else {
+          bodyHtml += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
+        }
+      }
+      if (chatIdCol) {
+        const cid = escapeHtml(String(row[chatIdCol] || ""));
+        bodyHtml += `<td class="grid-actions-cell"><button class="btn btn-sm btn-secondary" data-export-chat="${cid}" title="Export this chat">📤 Export</button></td>`;
       }
       bodyHtml += "</tr>";
     }
@@ -395,8 +454,8 @@ export function copyGridToClipboard() {
   const text = [header, ...rows].join("\n");
 
   navigator.clipboard.writeText(text).then(
-    () => _showToast("Copied to clipboard!"),
-    () => _showToast("Copy failed – check permissions")
+    () => showToast("Copied to clipboard!"),
+    () => showToast("Copy failed – check permissions")
   );
 }
 
@@ -430,7 +489,8 @@ export function renderHistory(runs) {
         </div>
         <div class="history-right">
           <span class="status-badge ${statusClass}">${escapeHtml(r.status)}</span>
-          ${r.status === "completed" ? `<button class="btn btn-sm btn-accent" data-dl-run="${r.run_id}">⬇</button>` : ""}
+          ${r.status === "completed" ? `<button class="btn btn-sm btn-secondary" data-view-run="${r.run_id}" title="View in grid">👁</button>` : ""}
+          ${r.status === "completed" ? `<button class="btn btn-sm btn-accent" data-dl-run="${r.run_id}" title="Download">⬇</button>` : ""}
         </div>
       </div>`;
   }
@@ -439,7 +499,7 @@ export function renderHistory(runs) {
 
 // ── Toast (simple) ────────────────────────────────────────────────────────
 
-function _showToast(msg) {
+export function showToast(msg) {
   let toast = document.getElementById("toast");
   if (!toast) {
     toast = document.createElement("div");
@@ -483,4 +543,13 @@ export function getElement(key) {
 
 export function getElements() {
   return els;
+}
+
+/**
+ * Pre-fill the Export Chat form with a chat ID and switch to it.
+ */
+export function prefillExportChat(chatId) {
+  const input = els.formExportChat.querySelector('input[name="chat_id"]');
+  if (input) input.value = chatId;
+  showForm("export_chat");
 }

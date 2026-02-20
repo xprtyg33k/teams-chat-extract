@@ -45,11 +45,11 @@
       <aside class="sidebar">
         <h3 class="sidebar-title">Actions</h3>
 
-        <div class="action-card" data-action="export_chat">
-          <div class="action-icon">📤</div>
+        <div class="action-card" data-action="list_active_chats">
+          <div class="action-icon">🟢</div>
           <div class="action-info">
-            <strong>Export Chat</strong>
-            <span>Export messages from a specific chat</span>
+            <strong>Active Chats</strong>
+            <span>Find recently active chats</span>
           </div>
         </div>
 
@@ -61,11 +61,11 @@
           </div>
         </div>
 
-        <div class="action-card" data-action="list_active_chats">
-          <div class="action-icon">🟢</div>
+        <div class="action-card" data-action="export_chat">
+          <div class="action-icon">📤</div>
           <div class="action-info">
-            <strong>Active Chats</strong>
-            <span>Find recently active chats</span>
+            <strong>Export Chat</strong>
+            <span>Export messages from a specific chat</span>
           </div>
         </div>
 
@@ -93,9 +93,25 @@
               </label>
               <label>Since Date <span class="req">*</span>
                 <input type="date" name="since" required />
+                <div class="date-shortcuts">
+                  <button type="button" class="btn-date-shift" data-date-target="since" data-shift="-1y">−1Y</button>
+                  <button type="button" class="btn-date-shift" data-date-target="since" data-shift="-3m">−3M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="since" data-shift="-1m">−1M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="since" data-shift="+1m">+1M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="since" data-shift="+3m">+3M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="since" data-shift="+1y">+1Y</button>
+                </div>
               </label>
               <label>Until Date
                 <input type="date" name="until" />
+                <div class="date-shortcuts">
+                  <button type="button" class="btn-date-shift" data-date-target="until" data-shift="-1y">−1Y</button>
+                  <button type="button" class="btn-date-shift" data-date-target="until" data-shift="-3m">−3M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="until" data-shift="-1m">−1M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="until" data-shift="+1m">+1M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="until" data-shift="+3m">+3M</button>
+                  <button type="button" class="btn-date-shift" data-date-target="until" data-shift="+1y">+1Y</button>
+                </div>
               </label>
               <label>Format
                 <select name="format">

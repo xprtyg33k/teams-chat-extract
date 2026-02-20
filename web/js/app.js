@@ -80,6 +80,14 @@ function wireEvents() {
     submitRun("list_active_chats", els.formListActiveChats);
   });
 
+  // Date shortcut buttons (delegated on forms panel)
+  els.panelForms.addEventListener("click", (e) => {
+    const btn = e.target.closest(".btn-date-shift");
+    if (btn) {
+      ui.shiftDateInput(btn.dataset.dateTarget, btn.dataset.shift);
+    }
+  });
+
   // Results: download
   els.btnDownload.addEventListener("click", () => {
     const runId = els.btnDownload.dataset.runId;
@@ -118,17 +126,44 @@ function wireEvents() {
   // Grid: copy
   els.btnCopyGrid.addEventListener("click", () => ui.copyGridToClipboard());
 
-  // History: click a run or download button (delegated)
-  els.historyList.addEventListener("click", (e) => {
+  // Grid: row actions (copy chat ID, export chat)
+  els.gridBody.addEventListener("click", (e) => {
+    const copyBtn = e.target.closest("[data-copy-id]");
+    if (copyBtn) {
+      e.stopPropagation();
+      const chatId = copyBtn.dataset.copyId;
+      navigator.clipboard.writeText(chatId).then(
+        () => ui.showToast("Chat ID copied!"),
+        () => ui.showToast("Copy failed – check permissions")
+      );
+      return;
+    }
+    const exportBtn = e.target.closest("[data-export-chat]");
+    if (exportBtn) {
+      e.stopPropagation();
+      const chatId = exportBtn.dataset.exportChat;
+      _currentAction = "export_chat";
+      ui.setActiveAction("export_chat");
+      ui.prefillExportChat(chatId);
+      return;
+    }
+  });
+
+  // History: click a run — view or download (delegated)
+  els.historyList.addEventListener("click", async (e) => {
     const dlBtn = e.target.closest("[data-dl-run]");
     if (dlBtn) {
       window.open(biz.getDownloadUrl(dlBtn.dataset.dlRun), "_blank");
       return;
     }
+    const viewBtn = e.target.closest("[data-view-run]");
+    if (viewBtn) {
+      await loadAndShowRun(viewBtn.dataset.viewRun);
+      return;
+    }
     const item = e.target.closest(".history-item");
     if (item && item.dataset.runId) {
-      // Could reload results for this run — for now just download
-      window.open(biz.getDownloadUrl(item.dataset.runId), "_blank");
+      await loadAndShowRun(item.dataset.runId);
     }
   });
 }
@@ -213,6 +248,24 @@ async function showHistory() {
   ui.renderHistory([]); // clear while loading
   const runs = await biz.refreshHistory();
   ui.renderHistory(runs);
+}
+
+/**
+ * Fetch results for a completed run and display in the grid.
+ */
+async function loadAndShowRun(runId) {
+  const results = await biz.loadRunResults(runId);
+  if (results) {
+    _activeRunId = runId;
+    ui.showResults(
+      results.summary || {},
+      results.grid_data || [],
+      results.grid_total || 0,
+      runId
+    );
+  } else {
+    ui.showError("Load Failed", "Could not retrieve results for this run.");
+  }
 }
 
 // ── Go ────────────────────────────────────────────────────────────────────

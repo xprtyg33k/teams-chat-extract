@@ -259,6 +259,30 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
   width: 16px; height: 16px;
 }
 
+/* Date shortcut buttons */
+.date-shortcuts {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.btn-date-shift {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-family: var(--font);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-date-shift:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
 /* ── Progress Bar ─────────────────────────────────────────────────────── */
 
 .progress-bar-container {
@@ -355,6 +379,15 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
   white-space: nowrap;
 }
 .data-grid tr:hover td { background: var(--accent-bg); }
+
+/* Row actions */
+.grid-actions-col { width: 100px; text-align: center; cursor: default !important; }
+.grid-actions-cell { text-align: center; white-space: nowrap; }
+.chat-id-cell { display: inline-flex; align-items: center; gap: 4px; }
+.btn-icon { background: none; border: none; cursor: pointer; padding: 2px 4px; font-size: 0.8rem; border-radius: var(--radius-sm); transition: background 0.15s; }
+.btn-icon:hover { background: var(--accent-bg); }
+.btn-copy-id { opacity: 0.5; }
+.btn-copy-id:hover { opacity: 1; }
 
 .grid-footer {
   display: flex; align-items: center; justify-content: space-between;

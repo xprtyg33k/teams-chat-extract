@@ -325,18 +325,33 @@ def _run_list_chats(run_id: str) -> None:
 
         _update(run_id, progress=10, progress_message="Fetching chats…")
 
+        # Build Graph API query parameters for server-side filtering
+        api_params: Dict[str, Any] = {
+            "$expand": "members",
+            "$top": "50",
+        }
+
+        # Apply chatType filter server-side when a specific type is requested
+        chat_type = filters.get("chat_type", "all")
+        if chat_type and chat_type != "all":
+            api_params["$filter"] = f"chatType eq '{chat_type}'"
+
         results: List[Dict[str, Any]] = []
         total_processed = 0
 
-        for chat in client._paginate("/me/chats"):
+        for chat in client._paginate("/me/chats", api_params):
             total_processed += 1
             chat_id = chat.get("id", "")
-            members = None
-            try:
-                members = client.get_chat_members(chat_id)
-            except Exception:
-                pass
 
+            # Members come from $expand (avoids per-chat API call)
+            members = chat.get("members")
+            if members is None:
+                try:
+                    members = client.get_chat_members(chat_id)
+                except Exception:
+                    members = []
+
+            # Apply remaining filters that Graph API doesn't support natively
             if not _matches_filters(chat, members, filters):
                 continue
 
@@ -428,7 +443,11 @@ def _run_list_active_chats(run_id: str) -> None:
         results: List[Dict[str, Any]] = []
         total = 0
 
-        api_params = {"$select": "id,chatType,topic,lastMessagePreview"}
+        api_params = {
+            "$select": "id,chatType,topic,lastMessagePreview",
+            "$expand": "members",
+            "$top": "50",
+        }
         for chat in client._paginate("/me/chats", api_params):
             total += 1
             chat_id = chat.get("id", "")
@@ -437,11 +456,13 @@ def _run_list_active_chats(run_id: str) -> None:
             if chat_type == "channel":
                 continue
 
-            members = None
-            try:
-                members = client.get_chat_members(chat_id)
-            except Exception:
-                continue
+            # Members come from $expand (avoids per-chat API call)
+            members = chat.get("members")
+            if members is None:
+                try:
+                    members = client.get_chat_members(chat_id)
+                except Exception:
+                    continue
 
             if chat_type == "meeting" and max_meeting and members and len(members) > max_meeting:
                 continue

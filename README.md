@@ -77,16 +77,41 @@ For CLI-only usage see **[cli/QUICKSTART.md](cli/QUICKSTART.md)**.
 
 ---
 
-## Azure AD Setup
+## Azure AD Credentials
 
-Register an application in [Azure Portal](https://portal.azure.com):
+This tool requires two identifiers to connect to Microsoft Graph:
 
-1. **App registrations → New registration** (Single tenant)
-2. Copy the **Application (client) ID** and **Directory (tenant) ID**
-3. **API permissions → Add → Microsoft Graph → Delegated**:
+| Variable | What it is | Scope |
+|----------|-----------|-------|
+| `TEAMS_TENANT_ID` | Your Azure AD **Directory (tenant) ID** — identifies your organization | One per organization |
+| `TEAMS_CLIENT_ID` | The **Application (client) ID** of the registered app | One per organization |
+
+> **These IDs are not secrets.** They identify your organization and the app
+> registration, not any individual user.  They are safe to share with coworkers
+> in the same Azure AD tenant.  Each person authenticates independently using
+> the device-code flow and receives their own session token — they will only
+> see chats their own account has access to.
+
+### Already have the IDs?
+
+If a coworker or admin has already set up the app registration, just ask them
+for the two IDs and skip ahead to [Configure credentials](#configure-credentials).
+
+### First-time setup (admin / one-time per organization)
+
+> Only required if no one in your organization has registered the app yet.
+
+1. Go to [Azure Portal](https://portal.azure.com) → **App registrations → New registration**
+2. Name it (e.g. `TeamsExport`), choose **Single tenant**, click **Register**
+3. Copy the **Application (client) ID** and **Directory (tenant) ID**
+4. Under **API permissions → Add permission → Microsoft Graph → Delegated**:
    - `Chat.Read`
    - `User.ReadBasic.All`
-4. Click **Grant admin consent**
+5. Click **Grant admin consent** (or ask your tenant admin)
+6. Share the two IDs with your team — anyone in the same Azure AD tenant can
+   use them
+
+### Configure credentials
 
 Create `.env` in the project root:
 
