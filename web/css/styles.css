@@ -228,6 +228,9 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
 }
 .req { color: var(--danger); }
 
+.form-grid .full-width { grid-column: 1 / -1; }
+
+.form-grid textarea,
 .form-grid input[type="text"],
 .form-grid input[type="number"],
 .form-grid input[type="date"],
@@ -241,6 +244,9 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
   font-family: var(--font);
   transition: border-color 0.15s;
 }
+.form-grid textarea { resize: vertical; min-height: 60px; font-family: var(--font-mono); font-size: 0.85rem; }
+
+.form-grid textarea:focus,
 .form-grid input:focus,
 .form-grid select:focus {
   outline: none;

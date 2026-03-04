@@ -88,8 +88,8 @@
           <form id="formExportChat" class="form-panel hidden" autocomplete="off">
             <h2>Export Chat Messages</h2>
             <div class="form-grid">
-              <label>Chat ID <span class="req">*</span>
-                <input type="text" name="chat_id" placeholder="19:xxxxxx@thread.v2" required />
+              <label class="full-width">Chat ID(s) <span class="req">*</span> <small>one per line for parallel export</small>
+                <textarea name="chat_ids" rows="3" placeholder="19:xxxxxx@thread.v2&#10;19:yyyyyy@thread.v2" required></textarea>
               </label>
               <label>Since Date <span class="req">*</span>
                 <input type="date" name="since" required />

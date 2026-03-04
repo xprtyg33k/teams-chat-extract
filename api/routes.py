@@ -71,13 +71,20 @@ def auth_logout():
 @router.post("/runs/export-chat", response_model=RunResponse)
 def run_export_chat(body: ExportChatRequest):
     """Start a chat-export run and return its run_id."""
+    # Normalise: accept chat_id (single) or chat_ids (list)
+    chat_ids = body.chat_ids or []
+    if body.chat_id and body.chat_id not in chat_ids:
+        chat_ids.insert(0, body.chat_id)
+    if not chat_ids:
+        raise HTTPException(status_code=422, detail="chat_id or chat_ids is required")
+
     try:
         auth_manager.get_access_token()
     except RuntimeError:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     run_id = run_manager.start_export_chat(
-        chat_id=body.chat_id,
+        chat_ids=chat_ids,
         since=body.since,
         until=body.until,
         fmt=body.format.value,

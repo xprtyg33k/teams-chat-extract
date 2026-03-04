@@ -64,7 +64,8 @@ class ForceLoginRequest(BaseModel):
 # ── Run / Job ─────────────────────────────────────────────────────────────
 
 class ExportChatRequest(BaseModel):
-    chat_id: str
+    chat_id: Optional[str] = None
+    chat_ids: Optional[List[str]] = None
     since: str
     until: Optional[str] = None
     format: ExportFormat = ExportFormat.JSON

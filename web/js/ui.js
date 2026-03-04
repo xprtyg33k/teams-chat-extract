@@ -217,15 +217,20 @@ export function readForm(formEl) {
  */
 export function buildParams(action, raw) {
   switch (action) {
-    case "export_chat":
+    case "export_chat": {
+      const ids = (raw.chat_ids || "")
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       return {
-        chat_id: raw.chat_id,
+        chat_ids: ids,
         since: raw.since,
         until: raw.until || null,
         format: raw.format || "json",
         exclude_system_messages: !!raw.exclude_system_messages,
         only_mine: !!raw.only_mine,
       };
+    }
     case "list_chats": {
       const topicInc = raw.topic_include
         ? raw.topic_include.split(",").map((s) => s.trim()).filter(Boolean)
