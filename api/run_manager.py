@@ -376,24 +376,32 @@ def _run_export_chat(run_id: str) -> None:
         all_export_data: List[Dict[str, Any]] = []
         completed_count = [0]
         errors: List[str] = []
+        _progress_lock = threading.Lock()
 
         def _do_export(cid: str) -> Optional[Dict[str, Any]]:
+            # Each worker gets its own client to avoid sharing requests.Session
+            worker_client = GraphAPIClient(token, verbose=False)
             try:
                 result = _export_single_chat(
-                    client, cid, since_dt, until_dt,
+                    worker_client, cid, since_dt, until_dt,
                     params["only_mine"], my_user_id,
                     params["exclude_system_messages"],
                 )
-                completed_count[0] += 1
-                pct = 15 + int(70 * completed_count[0] / total_chats)
-                _update(
-                    run_id, progress=min(pct, 85),
-                    progress_message=f"Exported {completed_count[0]}/{total_chats} chats…",
-                )
+                # Inject chat_id into each message for grid attribution
+                for msg in result.get("messages", []):
+                    msg["chat_id"] = cid
+                with _progress_lock:
+                    completed_count[0] += 1
+                    pct = 15 + int(70 * completed_count[0] / total_chats)
+                    _update(
+                        run_id, progress=min(pct, 85),
+                        progress_message=f"Exported {completed_count[0]}/{total_chats} chats…",
+                    )
                 return result
             except Exception as exc:
-                completed_count[0] += 1
-                errors.append(f"{cid}: {exc}")
+                with _progress_lock:
+                    completed_count[0] += 1
+                    errors.append(f"{cid}: {exc}")
                 return None
 
         if total_chats == 1:
@@ -434,7 +442,7 @@ def _run_export_chat(run_id: str) -> None:
 
         grid_data = [
             {
-                "chat_id": m.get("chat_id", all_export_data[0]["chat_id"] if len(all_export_data) == 1 else ""),
+                "chat_id": m.get("chat_id", ""),
                 "id": m["id"],
                 "created": m["createdDateTime"],
                 "sender": m.get("from", {}).get("displayName", "Unknown"),
