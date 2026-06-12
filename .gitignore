@@ -51,6 +51,7 @@ htmlcov/
 *.db
 
 api_results/
+data/
 
 # Output files
 out/

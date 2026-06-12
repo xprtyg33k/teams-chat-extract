@@ -13,13 +13,13 @@ services:
       # Mount .env as a secret or volume; uvicorn reads it via load_env_file()
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      DATA_DIR: "/app/data"
     volumes:
       # Mount .env for credentials (read-only)
       - ./.env:/app/.env:ro
       # Persist auth token cache, run history DB, and result files across rebuilds
-      - ./.token_cache.bin:/app/.token_cache.bin
-      - ./runs.db:/app/runs.db
-      - ./api_results:/app/api_results
+      # Uses a directory mount to avoid Docker creating directories for missing files
+      - ./data:/app/data
       # Optional: mount source for hot-reload during development
       - ./api:/app/api:ro
       - ./cli:/app/cli:ro

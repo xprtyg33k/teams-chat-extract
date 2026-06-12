@@ -610,10 +610,6 @@ export function showToast(msg) {
   }, 2500);
 }
 
-export function showToast(msg) {
-  _showToast(msg);
-}
-
 // ── Error display ─────────────────────────────────────────────────────────
 
 export function showError(title, detail) {

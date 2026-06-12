@@ -55,7 +55,7 @@ def load_env_file(env_file: str = ".env") -> None:
 
 # Constants
 GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
-TOKEN_CACHE_FILE = ".token_cache.bin"
+TOKEN_CACHE_FILE = os.path.join(os.environ.get("DATA_DIR", "."), ".token_cache.bin")
 SCOPES = [
     "Chat.Read",
     "User.ReadBasic.All",
@@ -596,7 +596,7 @@ class GraphAPIClient:
         print_progress("Resolving online meeting by join URL...", self.verbose)
         safe_join_web_url = join_web_url.replace("'", "''")
         params = {
-            "$filter": f"JoinWebUrl eq '{safe_join_web_url}'"
+            "$filter": f"joinWebUrl eq '{safe_join_web_url}'"
         }
         response = self._make_request(f"/users/{user_id}/onlineMeetings", params)
         meetings = response.get("value", [])

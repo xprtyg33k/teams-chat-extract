@@ -177,6 +177,10 @@ def run_list_active_chats(body: ListActiveChatsRequest):
 @router.delete("/runs")
 def runs_clear_all():
     """Delete all runs, their DB records, and result files."""
+    try:
+        auth_manager.get_access_token()
+    except RuntimeError:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     count = run_manager.clear_all_runs()
     return {"ok": True, "deleted": count}
 
@@ -184,6 +188,10 @@ def runs_clear_all():
 @router.delete("/runs/{run_id}")
 def runs_delete(run_id: str):
     """Delete a single run by its run_id."""
+    try:
+        auth_manager.get_access_token()
+    except RuntimeError:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     found = run_manager.delete_run(run_id)
     if not found:
         raise HTTPException(status_code=404, detail="Run not found")

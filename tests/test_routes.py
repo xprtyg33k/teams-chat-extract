@@ -311,26 +311,44 @@ class TestRunStatus:
 
 class TestRunDelete:
     def test_delete_run_success(self, client):
-        with patch("api.routes.run_manager") as mock:
+        with patch("api.routes.auth_manager") as auth_mock, \
+             patch("api.routes.run_manager") as mock:
+            auth_mock.get_access_token.return_value = "tok"
             mock.delete_run.return_value = True
             resp = client.delete("/api/runs/abc123")
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
 
     def test_delete_run_not_found(self, client):
-        with patch("api.routes.run_manager") as mock:
+        with patch("api.routes.auth_manager") as auth_mock, \
+             patch("api.routes.run_manager") as mock:
+            auth_mock.get_access_token.return_value = "tok"
             mock.delete_run.return_value = False
             resp = client.delete("/api/runs/missing")
         assert resp.status_code == 404
 
+    def test_delete_run_unauthenticated(self, client):
+        with patch("api.routes.auth_manager") as auth_mock:
+            auth_mock.get_access_token.side_effect = RuntimeError("Not authenticated")
+            resp = client.delete("/api/runs/abc123")
+        assert resp.status_code == 401
+
 
 class TestRunClearAll:
     def test_clear_all_runs(self, client):
-        with patch("api.routes.run_manager") as mock:
+        with patch("api.routes.auth_manager") as auth_mock, \
+             patch("api.routes.run_manager") as mock:
+            auth_mock.get_access_token.return_value = "tok"
             mock.clear_all_runs.return_value = 7
             resp = client.delete("/api/runs")
         assert resp.status_code == 200
         assert resp.json() == {"ok": True, "deleted": 7}
+
+    def test_clear_all_runs_unauthenticated(self, client):
+        with patch("api.routes.auth_manager") as auth_mock:
+            auth_mock.get_access_token.side_effect = RuntimeError("Not authenticated")
+            resp = client.delete("/api/runs")
+        assert resp.status_code == 401
 
 
 class TestRunDownload:

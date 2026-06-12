@@ -37,10 +37,13 @@ from api.models import ActionType, RunStatus
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 
-RESULTS_DIR = Path("./api_results")
+DATA_DIR = Path(os.environ.get("DATA_DIR", "."))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+RESULTS_DIR = DATA_DIR / "api_results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
-DB_PATH = Path("./runs.db")
+DB_PATH = DATA_DIR / "runs.db"
 
 # ── SQLite persistence layer ─────────────────────────────────────────────
 

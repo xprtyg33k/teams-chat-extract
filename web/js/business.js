@@ -274,19 +274,6 @@ export async function clearAllRuns() {
 }
 
 /**
- * Load results for a completed run (for viewing in the grid).
- * Returns { summary, grid_data, grid_total } or null.
- */
-export async function loadRunResults(runId) {
-  try {
-    return await api.getRunResults(runId);
-  } catch (e) {
-    console.warn("[business] loadRunResults error:", e);
-    return null;
-  }
-}
-
-/**
  * Get locally stored run history (no network call).
  */
 export function getLocalHistory() {
