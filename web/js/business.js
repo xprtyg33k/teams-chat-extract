@@ -159,7 +159,7 @@ const _runPollers = new Map(); // run_id → intervalId
  * Launch an action.  Returns the run object.
  * Validates auth before starting.
  *
- * @param {"export_chat"|"list_chats"|"list_active_chats"} action
+ * @param {"export_chat"|"export_meeting_transcript"|"list_chats"|"list_active_chats"} action
  * @param {object} params  – form data to send
  */
 export async function startRun(action, params) {
@@ -173,6 +173,9 @@ export async function startRun(action, params) {
   switch (action) {
     case "export_chat":
       run = await api.startExportChat(params);
+      break;
+    case "export_meeting_transcript":
+      run = await api.startExportMeetingTranscript(params);
       break;
     case "list_chats":
       run = await api.startListChats(params);
@@ -257,6 +260,19 @@ export async function refreshHistory() {
   return store.getAllRuns();
 }
 
+export async function deleteRun(runId) {
+  await api.deleteRun(runId);
+  store.removeRun(runId);
+  _emit("run:deleted", { run_id: runId });
+}
+
+export async function clearAllRuns() {
+  const result = await api.clearAllRuns();
+  store.clearRuns();
+  _emit("runs:cleared", { deleted: result.deleted });
+  return result;
+}
+
 /**
  * Load results for a completed run (for viewing in the grid).
  * Returns { summary, grid_data, grid_total } or null.
@@ -278,6 +294,15 @@ export function getLocalHistory() {
 }
 
 /**
+ * Fetch results for a completed run (for re-hydrating the grid).
+ * Returns { action, params, summary, grid_data, grid_total, run_id }.
+ */
+export async function loadRunResults(runId) {
+  const results = await api.getRunResults(runId);
+  return results;
+}
+
+/**
  * Get available actions with metadata.
  */
 export function getActions() {
@@ -287,6 +312,12 @@ export function getActions() {
       label: "Active Chats",
       icon: "🟢",
       description: "Find recently active chats",
+    },
+    {
+      id: "export_meeting_transcript",
+      label: "Meeting Transcript",
+      icon: "📝",
+      description: "Export a meeting transcript as text or JSON",
     },
     {
       id: "list_chats",

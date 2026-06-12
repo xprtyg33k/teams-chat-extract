@@ -10,12 +10,13 @@ import argparse
 import json
 import os
 import random
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse, parse_qs
 
 import msal
 import requests
@@ -57,7 +58,9 @@ GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
 TOKEN_CACHE_FILE = ".token_cache.bin"
 SCOPES = [
     "Chat.Read",
-    "User.ReadBasic.All"
+    "User.ReadBasic.All",
+    "OnlineMeetings.Read",
+    "OnlineMeetingTranscript.Read.All",
 ]
 MAX_RETRIES = 5
 DEFAULT_BACKOFF_BASE = 2  # seconds
@@ -341,6 +344,27 @@ class GraphAPIClient:
         # Now encode it properly for the API
         return quote(chat_id, safe='')
 
+    def _normalize_graph_id(self, raw_id: str, *, field_name: str) -> str:
+        """
+        Normalize and URL-encode a generic Graph identifier.
+
+        Args:
+            raw_id: Raw or URL-encoded Graph identifier
+            field_name: Friendly field name used in progress output
+
+        Returns:
+            Properly URL-encoded identifier
+        """
+        if '%' in raw_id:
+            decoded = unquote(raw_id)
+            if decoded != raw_id:
+                print_progress(
+                    f"Note: {field_name} was URL-encoded. Using decoded value for proper encoding.",
+                    self.verbose
+                )
+                raw_id = decoded
+        return quote(raw_id, safe='')
+
     def _make_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Make HTTP request with retry logic and rate limiting.
@@ -388,7 +412,9 @@ class GraphAPIClient:
                     error_msg = error_data.get("error", {}).get("message", "Insufficient permissions")
                     raise PermissionError(
                         f"Access denied: {error_msg}. "
-                        f"Ensure the app has Chat.Read and User.ReadBasic.All permissions."
+                        "Ensure the app has the required Microsoft Graph permissions "
+                        "(Chat.Read, User.ReadBasic.All, OnlineMeetings.Read, "
+                        "OnlineMeetingTranscript.Read.All)."
                     )
 
                 elif response.status_code == 404:
@@ -407,6 +433,69 @@ class GraphAPIClient:
                 if attempt == self.max_retries - 1:
                     raise MaxRetriesExceeded(f"Max retries exceeded: {str(e)}")
 
+                backoff = DEFAULT_BACKOFF_BASE ** attempt
+                print_progress(
+                    f"Request error: {str(e)}. Retrying in {backoff}s... "
+                    f"(attempt {attempt + 1}/{self.max_retries})",
+                    self.verbose
+                )
+                time.sleep(backoff)
+
+        raise MaxRetriesExceeded("Max retries exceeded")
+
+    def _make_raw_request(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        *,
+        accept: Optional[str] = None,
+    ) -> Tuple[bytes, str]:
+        """
+        Make HTTP request and return raw response bytes plus content type.
+
+        This is used for endpoints like transcript content that do not return JSON.
+        """
+        if not url.startswith("http"):
+            url = f"{self.base_url}{url}"
+
+        headers = {}
+        if accept:
+            headers["Accept"] = accept
+
+        for attempt in range(self.max_retries):
+            try:
+                response = self.session.get(url, params=params, headers=headers, timeout=30)
+
+                if response.status_code == 200:
+                    return response.content, response.headers.get("Content-Type", "")
+
+                elif response.status_code in [429, 503, 504]:
+                    retry_after = int(response.headers.get("Retry-After", 0))
+                    backoff = max(retry_after, DEFAULT_BACKOFF_BASE ** attempt)
+                    jitter = random.uniform(0, 1)
+                    sleep_time = backoff + jitter
+                    print_progress(
+                        f"Rate limited (HTTP {response.status_code}). "
+                        f"Retrying in {sleep_time:.1f}s... (attempt {attempt + 1}/{self.max_retries})",
+                        self.verbose
+                    )
+                    time.sleep(sleep_time)
+                    continue
+
+                elif response.status_code == 403:
+                    error_data = response.json() if response.content else {}
+                    error_msg = error_data.get("error", {}).get("message", "Insufficient permissions")
+                    raise PermissionError(f"Access denied: {error_msg}.")
+
+                elif response.status_code == 404:
+                    raise NotFoundError(f"Resource not found: {url}")
+
+                else:
+                    response.raise_for_status()
+
+            except requests.RequestException as e:
+                if attempt == self.max_retries - 1:
+                    raise MaxRetriesExceeded(f"Max retries exceeded: {str(e)}")
                 backoff = DEFAULT_BACKOFF_BASE ** attempt
                 print_progress(
                     f"Request error: {str(e)}. Retrying in {backoff}s... "
@@ -481,6 +570,124 @@ class GraphAPIClient:
         chats = list(self._paginate("/me/chats", params))
         print_progress(f"Retrieved {len(chats)} chats", self.verbose)
         return chats
+
+    def get_online_meeting_by_id(
+        self,
+        meeting_id: str,
+        *,
+        user_id: str = "me",
+    ) -> Dict[str, Any]:
+        """
+        Get an online meeting by its Graph onlineMeeting ID.
+        """
+        print_progress(f"Retrieving online meeting {meeting_id}...", self.verbose)
+        encoded_meeting_id = self._normalize_graph_id(meeting_id, field_name="meeting ID")
+        return self._make_request(f"/users/{user_id}/onlineMeetings/{encoded_meeting_id}")
+
+    def get_online_meeting_by_join_web_url(
+        self,
+        join_web_url: str,
+        *,
+        user_id: str = "me",
+    ) -> Dict[str, Any]:
+        """
+        Resolve an online meeting from its Teams join URL.
+        """
+        print_progress("Resolving online meeting by join URL...", self.verbose)
+        safe_join_web_url = join_web_url.replace("'", "''")
+        params = {
+            "$filter": f"JoinWebUrl eq '{safe_join_web_url}'"
+        }
+        response = self._make_request(f"/users/{user_id}/onlineMeetings", params)
+        meetings = response.get("value", [])
+        if not meetings:
+            raise NotFoundError("No online meeting found for the supplied join URL")
+        return meetings[0]
+
+    def get_online_meeting_by_join_meeting_id(
+        self,
+        join_meeting_id: str,
+        *,
+        user_id: str = "me",
+    ) -> Dict[str, Any]:
+        """
+        Resolve an online meeting from its join meeting ID.
+        """
+        print_progress("Resolving online meeting by join meeting ID...", self.verbose)
+        safe_join_meeting_id = join_meeting_id.replace("'", "''")
+        params = {
+            "$filter": f"joinMeetingIdSettings/joinMeetingId eq '{safe_join_meeting_id}'"
+        }
+        response = self._make_request(f"/users/{user_id}/onlineMeetings", params)
+        meetings = response.get("value", [])
+        if not meetings:
+            raise NotFoundError("No online meeting found for the supplied join meeting ID")
+        return meetings[0]
+
+    def list_online_meeting_transcripts(
+        self,
+        online_meeting_id: str,
+        *,
+        user_id: str = "me",
+    ) -> List[Dict[str, Any]]:
+        """
+        List transcripts for an online meeting.
+        """
+        print_progress(f"Listing transcripts for meeting {online_meeting_id}...", self.verbose)
+        encoded_meeting_id = self._normalize_graph_id(
+            online_meeting_id,
+            field_name="online meeting ID",
+        )
+        return list(self._paginate(f"/users/{user_id}/onlineMeetings/{encoded_meeting_id}/transcripts"))
+
+    def get_transcript_content(
+        self,
+        online_meeting_id: str,
+        transcript_id: str,
+        *,
+        user_id: str = "me",
+        content_type: str = "text/vtt",
+    ) -> Tuple[str, str]:
+        """
+        Download transcript content and return it as decoded text plus content type.
+        """
+        print_progress(f"Downloading transcript {transcript_id}...", self.verbose)
+        encoded_meeting_id = self._normalize_graph_id(
+            online_meeting_id,
+            field_name="online meeting ID",
+        )
+        encoded_transcript_id = self._normalize_graph_id(
+            transcript_id,
+            field_name="transcript ID",
+        )
+        body, response_content_type = self._make_raw_request(
+            f"/users/{user_id}/onlineMeetings/{encoded_meeting_id}/transcripts/{encoded_transcript_id}/content",
+            accept=content_type,
+        )
+        return body.decode("utf-8-sig"), response_content_type
+
+    def get_transcript_metadata_content(
+        self,
+        online_meeting_id: str,
+        transcript_id: str,
+        *,
+        user_id: str = "me",
+    ) -> Dict[str, Any]:
+        """
+        Download transcript metadata content as JSON.
+        """
+        print_progress(f"Downloading transcript metadata for {transcript_id}...", self.verbose)
+        encoded_meeting_id = self._normalize_graph_id(
+            online_meeting_id,
+            field_name="online meeting ID",
+        )
+        encoded_transcript_id = self._normalize_graph_id(
+            transcript_id,
+            field_name="transcript ID",
+        )
+        return self._make_request(
+            f"/users/{user_id}/onlineMeetings/{encoded_meeting_id}/transcripts/{encoded_transcript_id}/metadataContent"
+        )
 
     def get_chat_by_id(self, chat_id: str) -> Dict[str, Any]:
         """
@@ -585,6 +792,129 @@ class GraphAPIClient:
             User profile object
         """
         return self._make_request("/me")
+
+
+def extract_join_meeting_id(join_web_url: str) -> Optional[str]:
+    """
+    Extract a Teams join meeting ID from a join URL when present.
+    """
+    try:
+        parsed = urlparse(join_web_url)
+        query = parse_qs(parsed.query)
+        for key in ("meetingId", "MeetingId"):
+            values = query.get(key)
+            if values and values[0].strip():
+                return values[0].strip()
+
+        path_match = re.search(r"/meetup-join/[^/]+/([^/?]+)", parsed.path)
+        if path_match:
+            candidate = unquote(path_match.group(1)).strip()
+            if candidate:
+                return candidate
+    except Exception:
+        return None
+    return None
+
+
+def parse_webvtt_transcript(vtt_text: str) -> List[Dict[str, str]]:
+    """
+    Parse WebVTT transcript content into cue dictionaries.
+    """
+    cues: List[Dict[str, str]] = []
+    lines = vtt_text.replace("\ufeff", "").splitlines()
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line or line == "WEBVTT":
+            i += 1
+            continue
+
+        if line.startswith("NOTE"):
+            i += 1
+            while i < len(lines) and lines[i].strip():
+                i += 1
+            continue
+
+        if "-->" not in line and i + 1 < len(lines) and "-->" in lines[i + 1]:
+            i += 1
+            line = lines[i].strip()
+
+        if "-->" not in line:
+            i += 1
+            continue
+
+        start_raw, end_raw = [part.strip() for part in line.split("-->", 1)]
+        start = start_raw.split(" ")[0]
+        end = end_raw.split(" ")[0]
+
+        i += 1
+        text_lines: List[str] = []
+        while i < len(lines) and lines[i].strip():
+            text_lines.append(lines[i].rstrip())
+            i += 1
+
+        speaker = ""
+        cleaned_lines: List[str] = []
+        for idx, raw_line in enumerate(text_lines):
+            line_text = raw_line.strip()
+            speaker_match = re.match(r"^<v(?:\s+([^>]+))?>(.*)$", line_text)
+            if speaker_match:
+                if idx == 0 and speaker_match.group(1):
+                    speaker = speaker_match.group(1).strip()
+                line_text = speaker_match.group(2)
+            line_text = re.sub(r"</?[^>]+>", "", line_text).strip()
+            if line_text:
+                cleaned_lines.append(line_text)
+
+        text = "\n".join(cleaned_lines).strip()
+        cues.append({
+            "index": str(len(cues) + 1),
+            "start": start,
+            "end": end,
+            "speaker": speaker,
+            "text": text,
+        })
+
+    return cues
+
+
+def format_meeting_transcript_txt(
+    meeting_info: Dict[str, Any],
+    transcript_info: Dict[str, Any],
+    cues: List[Dict[str, str]],
+) -> str:
+    """
+    Render a meeting transcript as a readable plain-text document.
+    """
+    lines = [
+        "=" * 80,
+        "MEETING TRANSCRIPT",
+        "=" * 80,
+        "",
+        f"Meeting ID:      {meeting_info.get('id', 'N/A')}",
+        f"Subject:         {meeting_info.get('subject') or meeting_info.get('joinWebUrl') or 'N/A'}",
+        f"Start:           {meeting_info.get('startDateTime', 'N/A')}",
+        f"End:             {meeting_info.get('endDateTime', 'N/A')}",
+        f"Transcript ID:   {transcript_info.get('id', 'N/A')}",
+        f"Transcript At:   {transcript_info.get('createdDateTime', 'N/A')}",
+        f"Cue Count:       {len(cues)}",
+        "",
+        "=" * 80,
+        "TRANSCRIPT",
+        "=" * 80,
+        "",
+    ]
+
+    for cue in cues:
+        speaker = cue.get("speaker") or "Unknown Speaker"
+        text = cue.get("text") or ""
+        lines.append(f"[{cue.get('start', '')} - {cue.get('end', '')}] {speaker}:")
+        if text:
+            lines.extend(text.splitlines())
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def html_to_text(html: str) -> str:
@@ -1300,4 +1630,3 @@ Examples:
 
 if __name__ == "__main__":
     sys.exit(main())
-

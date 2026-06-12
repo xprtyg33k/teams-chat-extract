@@ -20,10 +20,12 @@ from typing import Any, Dict, List, Optional
 
 from cli.teams_chat_export import (
     GraphAPIClient,
+    format_meeting_transcript_txt,
     get_chat_messages_filtered,
     get_user_by_identifier,
     find_chats_by_participants,
     html_to_text,
+    parse_webvtt_transcript,
     parse_date,
     process_message,
     export_to_json,
@@ -105,12 +107,14 @@ def _persist(run_id: str, data: Dict[str, Any]) -> None:
                  :created_at, :completed_at, :error, :result_file,
                  :params, :summary, :grid_data, :grid_total)
             ON CONFLICT(run_id) DO UPDATE SET
+                action=excluded.action,
                 status=excluded.status,
                 progress=excluded.progress,
                 progress_message=excluded.progress_message,
                 completed_at=excluded.completed_at,
                 error=excluded.error,
                 result_file=excluded.result_file,
+                params=excluded.params,
                 summary=excluded.summary,
                 grid_data=excluded.grid_data,
                 grid_total=excluded.grid_total
@@ -188,6 +192,7 @@ def get_all_runs() -> List[Dict[str, Any]]:
             "status": r["status"],
             "progress": r.get("progress", 0),
             "progress_message": r.get("progress_message"),
+            "params": r.get("params"),
             "created_at": r["created_at"],
             "completed_at": r.get("completed_at"),
             "summary": r.get("summary"),
@@ -199,6 +204,43 @@ def get_all_runs() -> List[Dict[str, Any]]:
             reverse=True,
         )
     ]
+
+
+def delete_run(run_id: str) -> bool:
+    """Delete a single run from cache, DB, and disk."""
+    with _lock:
+        data = _cache.pop(run_id, None)
+    if data is None:
+        with _get_conn() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT result_file FROM runs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            return False
+        data = dict(row)
+    with _get_conn() as conn:
+        conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+    result_file = data.get("result_file")
+    if result_file:
+        p = Path(result_file)
+        if p.exists():
+            p.unlink()
+    return True
+
+
+def clear_all_runs() -> int:
+    """Delete all runs from cache, DB, and remove all result files."""
+    with _get_conn() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        conn.execute("DELETE FROM runs")
+    with _lock:
+        _cache.clear()
+    for f in RESULTS_DIR.iterdir():
+        if f.is_file():
+            f.unlink()
+    return count
 
 
 def get_result_file_path(run_id: str) -> Optional[Path]:
@@ -216,6 +258,8 @@ def get_result_grid_data(run_id: str) -> Optional[Dict[str, Any]]:
     if not info:
         return None
     return {
+        "action": info.get("action"),
+        "params": info.get("params"),
         "summary": info.get("summary", {}),
         "grid_data": info.get("grid_data", []),
         "grid_total": info.get("grid_total", 0),
@@ -476,6 +520,174 @@ def _run_export_chat(run_id: str) -> None:
             summary=summary,
             grid_data=grid_data,
             grid_total=len(all_processed),
+        )
+
+    except Exception as exc:
+        _update(
+            run_id,
+            status=RunStatus.FAILED,
+            progress=100,
+            progress_message=str(exc),
+            error=str(exc),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
+# ── Export Meeting Transcript ─────────────────────────────────────────────
+
+def start_export_meeting_transcript(
+    meeting_identifier: str,
+    identifier_type: str,
+    transcript_id: Optional[str],
+    fmt: str,
+) -> str:
+    run_id = uuid.uuid4().hex
+    data = {
+        "run_id": run_id,
+        "action": ActionType.EXPORT_MEETING_TRANSCRIPT,
+        "status": RunStatus.PENDING,
+        "progress": 0,
+        "progress_message": "Queued",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "error": None,
+        "result_file": None,
+        "params": {
+            "meeting_identifier": meeting_identifier,
+            "identifier_type": identifier_type,
+            "transcript_id": transcript_id,
+            "format": fmt,
+        },
+        "summary": None,
+        "grid_data": [],
+        "grid_total": 0,
+    }
+    _insert(run_id, data)
+    t = threading.Thread(target=_run_export_meeting_transcript, args=(run_id,), daemon=True)
+    t.start()
+    return run_id
+
+
+def _resolve_online_meeting(client: GraphAPIClient, identifier_type: str, meeting_identifier: str) -> Dict[str, Any]:
+    if identifier_type == "online_meeting_id":
+        return client.get_online_meeting_by_id(meeting_identifier)
+    if identifier_type == "join_meeting_id":
+        return client.get_online_meeting_by_join_meeting_id(meeting_identifier)
+    return client.get_online_meeting_by_join_web_url(meeting_identifier)
+
+
+def _select_transcript(transcripts: List[Dict[str, Any]], transcript_id: Optional[str]) -> Dict[str, Any]:
+    if transcript_id:
+        for transcript in transcripts:
+            if transcript.get("id") == transcript_id:
+                return transcript
+        raise RuntimeError(f"Transcript not found: {transcript_id}")
+    return sorted(
+        transcripts,
+        key=lambda t: t.get("createdDateTime") or "",
+        reverse=True,
+    )[0]
+
+
+def _run_export_meeting_transcript(run_id: str) -> None:
+    try:
+        _update(run_id, status=RunStatus.RUNNING, progress=5, progress_message="Authenticating…")
+        token = get_access_token()
+        client = GraphAPIClient(token, verbose=False)
+
+        info = _get(run_id)
+        params = info["params"]
+
+        _update(run_id, progress=15, progress_message="Resolving meeting…")
+        meeting = _resolve_online_meeting(
+            client,
+            params["identifier_type"],
+            params["meeting_identifier"],
+        )
+
+        _update(run_id, progress=35, progress_message="Listing transcripts…")
+        transcripts = client.list_online_meeting_transcripts(meeting["id"])
+        if not transcripts:
+            raise RuntimeError("No transcripts found for this meeting")
+
+        transcript = _select_transcript(transcripts, params.get("transcript_id"))
+
+        _update(run_id, progress=55, progress_message="Downloading transcript content…")
+        raw_content, content_type = client.get_transcript_content(meeting["id"], transcript["id"])
+
+        metadata: Optional[Dict[str, Any]] = None
+        metadata_error: Optional[str] = None
+        try:
+            metadata = client.get_transcript_metadata_content(meeting["id"], transcript["id"])
+        except Exception as exc:
+            metadata_error = str(exc)
+
+        _update(run_id, progress=75, progress_message="Processing transcript…")
+        cues = parse_webvtt_transcript(raw_content)
+        if not cues:
+            raise RuntimeError("Transcript downloaded but no cues were found in the content")
+
+        grid_data = [
+            {
+                "start": cue.get("start"),
+                "end": cue.get("end"),
+                "speaker": cue.get("speaker") or "Unknown Speaker",
+                "text": cue.get("text", "")[:300],
+            }
+            for cue in cues[:50]
+        ]
+
+        summary = {
+            "total_messages": len(cues),
+            "chat_type": "meeting_transcript",
+            "date_range_start": meeting.get("startDateTime") or transcript.get("createdDateTime"),
+            "date_range_end": meeting.get("endDateTime") or transcript.get("endDateTime"),
+        }
+        if metadata_error:
+            summary["metadata_warning"] = metadata_error
+
+        output = {
+            "export_type": "meeting_transcript",
+            "meeting": {
+                "id": meeting.get("id"),
+                "subject": meeting.get("subject"),
+                "joinWebUrl": meeting.get("joinWebUrl"),
+                "startDateTime": meeting.get("startDateTime"),
+                "endDateTime": meeting.get("endDateTime"),
+            },
+            "transcript": {
+                "id": transcript.get("id"),
+                "createdDateTime": transcript.get("createdDateTime"),
+                "endDateTime": transcript.get("endDateTime"),
+                "contentType": content_type,
+            },
+            "cue_count": len(cues),
+            "cues": cues,
+        }
+        if metadata is not None:
+            output["metadata"] = metadata
+        if metadata_error:
+            output["metadata_error"] = metadata_error
+
+        ext = params["format"]
+        result_path = RESULTS_DIR / f"{run_id}.{ext}"
+        if ext == "json":
+            with open(result_path, "w", encoding="utf-8") as f:
+                json.dump(output, f, indent=2, ensure_ascii=False)
+        else:
+            with open(result_path, "w", encoding="utf-8") as f:
+                f.write(format_meeting_transcript_txt(output["meeting"], output["transcript"], cues))
+
+        _update(
+            run_id,
+            status=RunStatus.COMPLETED,
+            progress=100,
+            progress_message="Complete",
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            result_file=str(result_path),
+            summary=summary,
+            grid_data=grid_data,
+            grid_total=len(cues),
         )
 
     except Exception as exc:

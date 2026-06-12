@@ -6,7 +6,7 @@ Runs (jobs) return a token (run_id) that the front-end can poll.
 """
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from api import auth_manager, run_manager
 from api.models import (
@@ -15,6 +15,7 @@ from api.models import (
     DeviceCodePollResponse,
     DeviceCodeResponse,
     ExportChatRequest,
+    ExportMeetingTranscriptRequest,
     ListActiveChatsRequest,
     ListChatsRequest,
     ResultsResponse,
@@ -124,6 +125,29 @@ def run_list_chats(body: ListChatsRequest):
     }
 
 
+@router.post("/runs/export-meeting-transcript", response_model=RunResponse)
+def run_export_meeting_transcript(body: ExportMeetingTranscriptRequest):
+    """Start a meeting transcript export run."""
+    try:
+        auth_manager.get_access_token()
+    except RuntimeError:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    run_id = run_manager.start_export_meeting_transcript(
+        meeting_identifier=body.meeting_identifier,
+        identifier_type=body.identifier_type.value,
+        transcript_id=body.transcript_id,
+        fmt=body.format.value,
+    )
+    info = run_manager.get_run_status(run_id)
+    return {
+        "run_id": run_id,
+        "action": info["action"],
+        "status": info["status"],
+        "created_at": info["created_at"],
+    }
+
+
 @router.post("/runs/list-active-chats", response_model=RunResponse)
 def run_list_active_chats(body: ListActiveChatsRequest):
     """Start a list-active-chats run."""
@@ -143,6 +167,22 @@ def run_list_active_chats(body: ListActiveChatsRequest):
         "status": info["status"],
         "created_at": info["created_at"],
     }
+
+
+@router.delete("/runs")
+def runs_clear_all():
+    """Delete all runs, their DB records, and result files."""
+    count = run_manager.clear_all_runs()
+    return {"ok": True, "deleted": count}
+
+
+@router.delete("/runs/{run_id}")
+def runs_delete(run_id: str):
+    """Delete a single run by its run_id."""
+    found = run_manager.delete_run(run_id)
+    if not found:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"ok": True}
 
 
 @router.get("/runs/{run_id}/status", response_model=RunStatusResponse)
@@ -168,12 +208,19 @@ def run_status(run_id: str):
 def run_download(run_id: str):
     """Download the result file for a completed run."""
     fp = run_manager.get_result_file_path(run_id)
-    if not fp:
-        raise HTTPException(status_code=404, detail="Result file not found")
-    return FileResponse(
-        path=str(fp),
-        filename=fp.name,
-        media_type="application/octet-stream",
+    if fp:
+        return FileResponse(
+            path=str(fp),
+            filename=fp.name,
+            media_type="application/octet-stream",
+        )
+    # Fallback: generate JSON from stored grid_data
+    data = run_manager.get_result_grid_data(run_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return JSONResponse(
+        content=data.get("grid_data", []),
+        headers={"Content-Disposition": f'attachment; filename="{run_id}.json"'},
     )
 
 
@@ -196,6 +243,7 @@ def run_history():
                 "run_id": r["run_id"],
                 "action": r["action"],
                 "status": r["status"],
+                "params": r.get("params"),
                 "created_at": r["created_at"],
                 "completed_at": r.get("completed_at"),
                 "summary": r.get("summary"),

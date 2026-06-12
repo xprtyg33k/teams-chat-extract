@@ -53,6 +53,14 @@
           </div>
         </div>
 
+        <div class="action-card" data-action="export_meeting_transcript">
+          <div class="action-icon">📝</div>
+          <div class="action-info">
+            <strong>Meeting Transcript</strong>
+            <span>Export a meeting transcript as text or JSON</span>
+          </div>
+        </div>
+
         <div class="action-card" data-action="list_chats">
           <div class="action-icon">📋</div>
           <div class="action-info">
@@ -76,6 +84,18 @@
           <div class="action-info">
             <strong>Run History</strong>
             <span>View previous runs</span>
+          </div>
+        </div>
+
+        <div class="sidebar-spacer"></div>
+
+        <hr class="sidebar-divider" />
+
+        <div class="action-card" data-action="settings">
+          <div class="action-icon">⚙️</div>
+          <div class="action-info">
+            <strong>Settings</strong>
+            <span>Admin actions</span>
           </div>
         </div>
       </aside>
@@ -129,6 +149,33 @@
               </label>
             </div>
             <button type="submit" class="btn btn-primary">Run Export</button>
+          </form>
+
+          <!-- Export Meeting Transcript Form -->
+          <form id="formExportMeetingTranscript" class="form-panel hidden" autocomplete="off">
+            <h2>Export Meeting Transcript</h2>
+            <div class="form-grid">
+              <label>Identifier Type
+                <select name="identifier_type">
+                  <option value="join_web_url" selected>Join URL</option>
+                  <option value="online_meeting_id">Online Meeting ID</option>
+                  <option value="join_meeting_id">Join Meeting ID</option>
+                </select>
+              </label>
+              <label>Format
+                <select name="format">
+                  <option value="txt" selected>Text</option>
+                  <option value="json">JSON</option>
+                </select>
+              </label>
+              <label class="full-width">Meeting Identifier <span class="req">*</span>
+                <textarea name="meeting_identifier" rows="3" placeholder="Paste the Teams join URL, online meeting ID, or join meeting ID" required></textarea>
+              </label>
+              <label class="full-width">Transcript ID <small>(optional; defaults to most recent transcript)</small>
+                <input type="text" name="transcript_id" placeholder="Optional specific transcript ID" />
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Export Transcript</button>
           </form>
 
           <!-- List Chats Form -->
@@ -226,6 +273,21 @@
         <div id="panelHistory" class="panel hidden">
           <h2>Run History</h2>
           <div id="historyList" class="history-list"></div>
+        </div>
+
+        <!-- ── Settings ── -->
+        <div id="panelSettings" class="panel hidden">
+          <h2>Settings</h2>
+          <div class="settings-section">
+            <h3>Data Management</h3>
+            <div class="settings-item">
+              <div class="settings-info">
+                <strong>Clear All Runs</strong>
+                <span>Delete all run history, result files, and artifacts from the database.</span>
+              </div>
+              <button id="btnClearAllRuns" class="btn btn-danger">🗑 Clear All Runs</button>
+            </div>
+          </div>
         </div>
       </section>
     </main>

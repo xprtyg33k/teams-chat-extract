@@ -8,7 +8,8 @@ starting the web server.  All commands assume you are running from the
 
 - Python 3.8+
 - A Microsoft Teams account
-- An Azure AD app registration with `Chat.Read` and `User.ReadBasic.All`
+- An Azure AD app registration with `Chat.Read`, `User.ReadBasic.All`,
+  `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All`
   permissions (see main [README](../README.md#azure-ad-setup) for steps)
 
 ## 1. Configure credentials
@@ -108,7 +109,7 @@ python -m cli.teams_chat_export `
 | `Chat not found` | Run `list_chats` and verify the chat ID |
 | `Token expired` | Add `--force-login` |
 | Blank lines in TXT export | Add `--exclude-system-messages` |
-| `PermissionError` | Verify Azure AD app has `Chat.Read` |
+| `PermissionError` | Verify Azure AD app has the required chat and transcript Graph permissions |
 
 ---
 

@@ -103,10 +103,34 @@ export function getRun(runId) {
 }
 
 /**
+ * Remove a single run by id.
+ */
+export function removeRun(runId) {
+  _ensureLoaded();
+  _db.delete(runId);
+  _flush();
+}
+
+/**
+ * Clear all runs from local storage.
+ */
+export function clearRuns() {
+  _ensureLoaded();
+  _db.clear();
+  _flush();
+}
+
+/**
  * Merge server-side history into local DB (idempotent).
  */
 export function mergeHistory(serverRuns) {
   _ensureLoaded();
+  const serverIds = new Set((serverRuns || []).map((r) => r.run_id));
+  for (const runId of Array.from(_db.keys())) {
+    if (!serverIds.has(runId)) {
+      _db.delete(runId);
+    }
+  }
   for (const r of serverRuns) {
     const existing = _db.get(r.run_id);
     if (!existing || existing.status !== r.status) {

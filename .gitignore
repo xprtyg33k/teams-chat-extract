@@ -50,6 +50,8 @@ htmlcov/
 .env
 *.db
 
+api_results/
+
 # Output files
 out/
 output*/

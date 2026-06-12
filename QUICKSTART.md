@@ -32,6 +32,8 @@ Microsoft account.
 4. Under **API permissions → Add permission → Microsoft Graph → Delegated**:
    - `Chat.Read`
    - `User.ReadBasic.All`
+   - `OnlineMeetings.Read`
+   - `OnlineMeetingTranscript.Read.All`
 5. Click **Grant admin consent** (or ask your tenant admin)
 
 ---
@@ -95,6 +97,7 @@ Select one of the three actions from the left sidebar:
 | Action | What it does |
 |--------|-------------|
 | **Export Chat** | Downloads all messages from a specific chat for a date range |
+| **Meeting Transcript** | Downloads a meeting transcript as text or JSON |
 | **List Chats** | Browses and filters your chats by type, topic, or participant |
 | **Active Chats** | Finds chats with recent activity, sorted by last message date |
 
@@ -136,6 +139,7 @@ Key endpoints:
 | `POST` | `/api/runs/list-chats` | Start a List Chats job |
 | `POST` | `/api/runs/list-active-chats` | Start an Active Chats job |
 | `POST` | `/api/runs/export-chat` | Start a Chat Export job |
+| `POST` | `/api/runs/export-meeting-transcript` | Start a Meeting Transcript export job |
 | `GET` | `/api/runs/{run_id}/status` | Poll job progress |
 | `GET` | `/api/runs/{run_id}/results` | Get grid-ready results |
 | `GET` | `/api/runs/{run_id}/download` | Download result file |
@@ -158,7 +162,7 @@ script usage without the web server.
 | Device code expires | Click **Start Login** again to get a fresh code |
 | Run fails immediately | Open `/docs`, hit `GET /api/auth/status` to confirm authentication |
 | Port 8080 in use | Change port: `--port 9000` or `docker-compose up -e WEB_PORT=9090` |
-| `Chat.Read` permission error | Verify admin consent is granted in Azure Portal |
+| Graph permission error | Verify admin consent is granted for chat and transcript permissions in Azure Portal |
 
 ---
 

@@ -223,6 +223,47 @@ class TestRunListChats:
         assert resp.json()["run_id"] == "run2"
 
 
+class TestRunExportMeetingTranscript:
+    def test_unauthenticated(self, client):
+        with patch("api.routes.auth_manager") as mock:
+            mock.get_access_token.side_effect = RuntimeError("Not authenticated")
+            resp = client.post(
+                "/api/runs/export-meeting-transcript",
+                json={"meeting_identifier": "https://teams.microsoft.com/l/meetup-join/test"},
+            )
+        assert resp.status_code == 401
+
+    def test_start_export_meeting_transcript(self, client):
+        with patch("api.routes.auth_manager") as auth_mock, \
+             patch("api.routes.run_manager") as run_mock:
+            auth_mock.get_access_token.return_value = "tok"
+            run_mock.start_export_meeting_transcript.return_value = "run-transcript"
+            run_mock.get_run_status.return_value = {
+                "action": ActionType.EXPORT_MEETING_TRANSCRIPT,
+                "status": RunStatus.PENDING,
+                "created_at": "2025-06-01T00:00:00Z",
+            }
+            resp = client.post(
+                "/api/runs/export-meeting-transcript",
+                json={
+                    "meeting_identifier": "https://teams.microsoft.com/l/meetup-join/test",
+                    "identifier_type": "join_web_url",
+                    "format": "txt",
+                },
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["run_id"] == "run-transcript"
+        assert body["action"] == "export_meeting_transcript"
+        call_kwargs = run_mock.start_export_meeting_transcript.call_args[1]
+        assert call_kwargs["identifier_type"] == "join_web_url"
+        assert call_kwargs["fmt"] == "txt"
+
+    def test_validation_missing_meeting_identifier(self, client):
+        resp = client.post("/api/runs/export-meeting-transcript", json={})
+        assert resp.status_code == 422
+
+
 class TestRunListActiveChats:
     def test_unauthenticated(self, client):
         with patch("api.routes.auth_manager") as mock:
@@ -268,12 +309,48 @@ class TestRunStatus:
         assert resp.status_code == 404
 
 
+class TestRunDelete:
+    def test_delete_run_success(self, client):
+        with patch("api.routes.run_manager") as mock:
+            mock.delete_run.return_value = True
+            resp = client.delete("/api/runs/abc123")
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True}
+
+    def test_delete_run_not_found(self, client):
+        with patch("api.routes.run_manager") as mock:
+            mock.delete_run.return_value = False
+            resp = client.delete("/api/runs/missing")
+        assert resp.status_code == 404
+
+
+class TestRunClearAll:
+    def test_clear_all_runs(self, client):
+        with patch("api.routes.run_manager") as mock:
+            mock.clear_all_runs.return_value = 7
+            resp = client.delete("/api/runs")
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "deleted": 7}
+
+
 class TestRunDownload:
     def test_download_not_found(self, client):
         with patch("api.routes.run_manager") as mock:
             mock.get_result_file_path.return_value = None
+            mock.get_result_grid_data.return_value = None
             resp = client.get("/api/runs/abc/download")
         assert resp.status_code == 404
+
+    def test_download_fallback_grid_data(self, client):
+        with patch("api.routes.run_manager") as mock:
+            mock.get_result_file_path.return_value = None
+            mock.get_result_grid_data.return_value = {
+                "grid_data": [{"chat_id": "c1", "topic": "Test"}],
+            }
+            resp = client.get("/api/runs/abc/download")
+        assert resp.status_code == 200
+        assert resp.json() == [{"chat_id": "c1", "topic": "Test"}]
+        assert "attachment" in resp.headers.get("content-disposition", "")
 
     def test_download_success(self, client, tmp_path):
         result_file = tmp_path / "result.json"
@@ -332,3 +409,19 @@ class TestRunHistory:
         body = resp.json()
         assert body["total"] == 1
         assert body["runs"][0]["run_id"] == "r1"
+
+    def test_history_includes_params(self, client):
+        with patch("api.routes.run_manager") as mock:
+            mock.get_all_runs.return_value = [
+                {
+                    "run_id": "r1",
+                    "action": ActionType.LIST_CHATS,
+                    "status": RunStatus.COMPLETED,
+                    "params": {"chat_type": "meeting"},
+                    "created_at": "2025-06-01T00:00:00Z",
+                    "summary": {"total_chats": 4},
+                },
+            ]
+            resp = client.get("/api/runs/history")
+        body = resp.json()
+        assert body["runs"][0]["params"] == {"chat_type": "meeting"}

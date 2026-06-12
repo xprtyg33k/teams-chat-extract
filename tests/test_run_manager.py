@@ -16,8 +16,12 @@ from api.models import ActionType, RunStatus
 def _use_temp_db(tmp_path):
     """Point run_manager at a temporary SQLite DB for each test."""
     db_file = tmp_path / "test_runs.db"
+    results_dir = tmp_path / "api_results"
+    results_dir.mkdir()
     original_db = rm.DB_PATH
+    original_results_dir = rm.RESULTS_DIR
     rm.DB_PATH = db_file
+    rm.RESULTS_DIR = results_dir
     rm._init_db()
     with rm._lock:
         rm._cache.clear()
@@ -25,6 +29,7 @@ def _use_temp_db(tmp_path):
     with rm._lock:
         rm._cache.clear()
     rm.DB_PATH = original_db
+    rm.RESULTS_DIR = original_results_dir
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
@@ -326,6 +331,23 @@ class TestStartListChats:
         mock_t.start.assert_called_once()
 
 
+class TestStartExportMeetingTranscript:
+    def test_registers_run(self):
+        with patch.object(rm, "_run_export_meeting_transcript"):
+            with patch("threading.Thread") as mock_thread:
+                mock_t = mock_thread.return_value
+                run_id = rm.start_export_meeting_transcript(
+                    meeting_identifier="https://teams.microsoft.com/l/meetup-join/test",
+                    identifier_type="join_web_url",
+                    transcript_id=None,
+                    fmt="txt",
+                )
+        info = rm._get(run_id)
+        assert info["action"] == ActionType.EXPORT_MEETING_TRANSCRIPT
+        assert info["params"]["meeting_identifier"].startswith("https://teams.microsoft.com/")
+        mock_t.start.assert_called_once()
+
+
 class TestStartListActiveChats:
     def test_registers_run(self):
         with patch.object(rm, "_run_list_active_chats"):
@@ -338,3 +360,94 @@ class TestStartListActiveChats:
         assert info["action"] == ActionType.LIST_ACTIVE_CHATS
         assert info["params"]["min_activity_days"] == 90
         mock_t.start.assert_called_once()
+
+
+class TestRunExportMeetingTranscript:
+    def test_success_txt_output(self):
+        rm._insert("rt1", {
+            "run_id": "rt1",
+            "action": ActionType.EXPORT_MEETING_TRANSCRIPT,
+            "status": RunStatus.PENDING,
+            "progress": 0,
+            "progress_message": "Queued",
+            "created_at": "2025-01-01T00:00:00Z",
+            "completed_at": None,
+            "error": None,
+            "result_file": None,
+            "params": {
+                "meeting_identifier": "https://teams.microsoft.com/l/meetup-join/test",
+                "identifier_type": "join_web_url",
+                "transcript_id": None,
+                "format": "txt",
+            },
+            "summary": None,
+            "grid_data": [],
+            "grid_total": 0,
+        })
+
+        fake_client = patch("api.run_manager.GraphAPIClient").start().return_value
+        fake_client.get_online_meeting_by_join_web_url.return_value = {
+            "id": "meeting123",
+            "subject": "Incident Review",
+            "joinWebUrl": "https://teams.microsoft.com/l/meetup-join/test",
+            "startDateTime": "2025-01-01T10:00:00Z",
+            "endDateTime": "2025-01-01T11:00:00Z",
+        }
+        fake_client.list_online_meeting_transcripts.return_value = [
+            {"id": "transcript1", "createdDateTime": "2025-01-01T11:05:00Z"}
+        ]
+        fake_client.get_transcript_content.return_value = (
+            "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<v Alice>Hello team\n",
+            "text/vtt",
+        )
+        fake_client.get_transcript_metadata_content.return_value = {"utterances": []}
+
+        with patch("api.run_manager.get_access_token", return_value="tok"):
+            rm._run_export_meeting_transcript("rt1")
+
+        patch.stopall()
+
+        info = rm._get("rt1")
+        assert info["status"] == RunStatus.COMPLETED
+        assert info["grid_total"] == 1
+        assert info["summary"]["total_messages"] == 1
+        assert Path(info["result_file"]).exists()
+        assert "MEETING TRANSCRIPT" in Path(info["result_file"]).read_text(encoding="utf-8")
+
+    def test_fails_when_no_transcripts(self):
+        rm._insert("rt2", {
+            "run_id": "rt2",
+            "action": ActionType.EXPORT_MEETING_TRANSCRIPT,
+            "status": RunStatus.PENDING,
+            "progress": 0,
+            "progress_message": "Queued",
+            "created_at": "2025-01-01T00:00:00Z",
+            "completed_at": None,
+            "error": None,
+            "result_file": None,
+            "params": {
+                "meeting_identifier": "meeting123",
+                "identifier_type": "online_meeting_id",
+                "transcript_id": None,
+                "format": "json",
+            },
+            "summary": None,
+            "grid_data": [],
+            "grid_total": 0,
+        })
+
+        fake_client = patch("api.run_manager.GraphAPIClient").start().return_value
+        fake_client.get_online_meeting_by_id.return_value = {
+            "id": "meeting123",
+            "subject": "Incident Review",
+        }
+        fake_client.list_online_meeting_transcripts.return_value = []
+
+        with patch("api.run_manager.get_access_token", return_value="tok"):
+            rm._run_export_meeting_transcript("rt2")
+
+        patch.stopall()
+
+        info = rm._get("rt2")
+        assert info["status"] == RunStatus.FAILED
+        assert "No transcripts found" in info["error"]

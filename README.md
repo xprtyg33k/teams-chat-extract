@@ -19,6 +19,7 @@ authentication logic.
 
 - 🔐 **Device-code authentication** — sign in via browser, token cached locally
 - 📤 **Export chat messages** — full date-range filtering, JSON or TXT output
+- 📝 **Export meeting transcripts** — download meeting transcripts as TXT or JSON
 - 📋 **List chats** — filter by type, topic, participant count
 - 🟢 **Active chats** — find recently active chats sorted by last message
 - 📊 **Interactive results grid** — sortable, searchable, paginated, copy-to-clipboard
@@ -107,6 +108,8 @@ for the two IDs and skip ahead to [Configure credentials](#configure-credentials
 4. Under **API permissions → Add permission → Microsoft Graph → Delegated**:
    - `Chat.Read`
    - `User.ReadBasic.All`
+   - `OnlineMeetings.Read`
+   - `OnlineMeetingTranscript.Read.All`
 5. Click **Grant admin consent** (or ask your tenant admin)
 6. Share the two IDs with your team — anyone in the same Azure AD tenant can
    use them
@@ -216,6 +219,7 @@ POST /api/auth/force-login            → clear cache, restart flow
 POST /api/auth/logout                 → sign out
 
 POST /api/runs/export-chat            → start export job
+POST /api/runs/export-meeting-transcript → start transcript export job
 POST /api/runs/list-chats             → start list-chats job
 POST /api/runs/list-active-chats      → start active-chats job
 GET  /api/runs/{run_id}/status        → poll job progress (0-100%)
