@@ -24,8 +24,15 @@ class ExportFormat(str, Enum):
     TXT = "txt"
 
 
+class MeetingIdentifierType(str, Enum):
+    JOIN_WEB_URL = "join_web_url"
+    ONLINE_MEETING_ID = "online_meeting_id"
+    JOIN_MEETING_ID = "join_meeting_id"
+
+
 class ActionType(str, Enum):
     EXPORT_CHAT = "export_chat"
+    EXPORT_MEETING_TRANSCRIPT = "export_meeting_transcript"
     LIST_CHATS = "list_chats"
     LIST_ACTIVE_CHATS = "list_active_chats"
 
@@ -64,12 +71,20 @@ class ForceLoginRequest(BaseModel):
 # ── Run / Job ─────────────────────────────────────────────────────────────
 
 class ExportChatRequest(BaseModel):
-    chat_id: str
+    chat_id: Optional[str] = None
+    chat_ids: Optional[List[str]] = None
     since: str
     until: Optional[str] = None
     format: ExportFormat = ExportFormat.JSON
     exclude_system_messages: bool = False
     only_mine: bool = False
+
+
+class ExportMeetingTranscriptRequest(BaseModel):
+    meeting_identifier: str = Field(min_length=1)
+    identifier_type: MeetingIdentifierType = MeetingIdentifierType.JOIN_WEB_URL
+    transcript_id: Optional[str] = None
+    format: ExportFormat = ExportFormat.TXT
 
 
 class ListChatsRequest(BaseModel):
@@ -108,6 +123,7 @@ class RunHistoryItem(BaseModel):
     run_id: str
     action: ActionType
     status: RunStatus
+    params: Optional[Dict[str, Any]] = None
     created_at: str
     completed_at: Optional[str] = None
     summary: Optional[Dict[str, Any]] = None

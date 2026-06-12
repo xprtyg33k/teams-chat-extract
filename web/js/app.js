@@ -58,6 +58,8 @@ function wireEvents() {
       const action = card.dataset.action;
       if (action === "history") {
         showHistory();
+      } else if (action === "settings") {
+        showSettings();
       } else {
         _currentAction = action;
         ui.setActiveAction(action);
@@ -70,6 +72,10 @@ function wireEvents() {
   els.formExportChat.addEventListener("submit", (e) => {
     e.preventDefault();
     submitRun("export_chat", els.formExportChat);
+  });
+  els.formExportMeetingTranscript.addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitRun("export_meeting_transcript", els.formExportMeetingTranscript);
   });
   els.formListChats.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -144,13 +150,27 @@ function wireEvents() {
       const chatId = exportBtn.dataset.exportChat;
       _currentAction = "export_chat";
       ui.setActiveAction("export_chat");
-      ui.prefillExportChat(chatId);
+      ui.showForm("export_chat");
+      ui.populateForm("export_chat", { chat_ids: [chatId] });
       return;
     }
   });
 
-  // History: click a run — view or download (delegated)
+  // History: click a run, download, or delete button (delegated)
   els.historyList.addEventListener("click", async (e) => {
+    const delBtn = e.target.closest("[data-delete-run]");
+    if (delBtn) {
+      e.stopPropagation();
+      const runId = delBtn.dataset.deleteRun;
+      if (!confirm("Delete this run and its artifacts?")) return;
+      try {
+        await biz.deleteRun(runId);
+        await showHistory();
+      } catch (err) {
+        ui.showError("Delete failed", err.message);
+      }
+      return;
+    }
     const dlBtn = e.target.closest("[data-dl-run]");
     if (dlBtn) {
       window.open(biz.getDownloadUrl(dlBtn.dataset.dlRun), "_blank");
@@ -158,12 +178,23 @@ function wireEvents() {
     }
     const viewBtn = e.target.closest("[data-view-run]");
     if (viewBtn) {
-      await loadAndShowRun(viewBtn.dataset.viewRun);
+      await rehydrateRun(viewBtn.dataset.viewRun);
       return;
     }
     const item = e.target.closest(".history-item");
     if (item && item.dataset.runId) {
-      await loadAndShowRun(item.dataset.runId);
+      await rehydrateRun(item.dataset.runId);
+    }
+  });
+
+  // Settings: clear all runs
+  els.btnClearAllRuns.addEventListener("click", async () => {
+    if (!confirm("Delete ALL runs and their artifacts? This cannot be undone.")) return;
+    try {
+      const result = await biz.clearAllRuns();
+      ui.showToast(`${result.deleted} run(s) deleted.`);
+    } catch (err) {
+      ui.showError("Clear failed", err.message);
     }
   });
 }
@@ -196,6 +227,7 @@ function wireBusinessListeners() {
     _activeRunId = run.run_id;
     const labels = {
       export_chat: "Exporting chat…",
+      export_meeting_transcript: "Exporting meeting transcript…",
       list_chats: "Listing chats…",
       list_active_chats: "Finding active chats…",
     };
@@ -215,7 +247,8 @@ function wireBusinessListeners() {
         r.summary || data.summary || {},
         r.grid_data || [],
         r.grid_total || 0,
-        data.run_id
+        data.run_id,
+        _currentAction
       );
     }
   });
@@ -241,6 +274,33 @@ async function submitRun(action, formEl) {
   }
 }
 
+async function rehydrateRun(runId) {
+  try {
+    const data = await biz.loadRunResults(runId);
+    const action = data.action;
+    const params = data.params;
+
+    // Switch to the action's form view with criteria pre-populated
+    _currentAction = action;
+    _activeRunId = runId;
+    ui.setActiveAction(action);
+    ui.showForm(action);
+    ui.populateForm(action, params);
+
+    // Hydrate the results grid without re-running the query
+    const r = data;
+    ui.showResults(
+      r.summary || {},
+      r.grid_data || [],
+      r.grid_total || 0,
+      runId,
+      action
+    );
+  } catch (e) {
+    ui.showError("Failed to load run", e.message);
+  }
+}
+
 async function showHistory() {
   _currentAction = null;
   ui.setActiveAction("history");
@@ -250,22 +310,10 @@ async function showHistory() {
   ui.renderHistory(runs);
 }
 
-/**
- * Fetch results for a completed run and display in the grid.
- */
-async function loadAndShowRun(runId) {
-  const results = await biz.loadRunResults(runId);
-  if (results) {
-    _activeRunId = runId;
-    ui.showResults(
-      results.summary || {},
-      results.grid_data || [],
-      results.grid_total || 0,
-      runId
-    );
-  } else {
-    ui.showError("Load Failed", "Could not retrieve results for this run.");
-  }
+function showSettings() {
+  _currentAction = null;
+  ui.setActiveAction("settings");
+  ui.showSettingsPanel();
 }
 
 // ── Go ────────────────────────────────────────────────────────────────────

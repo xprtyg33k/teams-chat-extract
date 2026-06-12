@@ -48,6 +48,10 @@ htmlcov/
 # Microsoft Teams Export Tool
 .token_cache.bin
 .env
+*.db
+
+api_results/
+data/
 
 # Output files
 out/

@@ -66,6 +66,10 @@ export function startExportChat(params) {
   return _request("POST", "/runs/export-chat", params);
 }
 
+export function startExportMeetingTranscript(params) {
+  return _request("POST", "/runs/export-meeting-transcript", params);
+}
+
 export function startListChats(params) {
   return _request("POST", "/runs/list-chats", params);
 }
@@ -84,6 +88,14 @@ export function getRunResults(runId) {
 
 export function getRunHistory() {
   return _request("GET", "/runs/history");
+}
+
+export function deleteRun(runId) {
+  return _request("DELETE", `/runs/${runId}`);
+}
+
+export function clearAllRuns() {
+  return _request("DELETE", "/runs");
 }
 
 /**

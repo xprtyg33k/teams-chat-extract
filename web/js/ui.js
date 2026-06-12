@@ -31,6 +31,7 @@ const els = {
 
   // forms
   formExportChat: $("#formExportChat"),
+  formExportMeetingTranscript: $("#formExportMeetingTranscript"),
   formListChats: $("#formListChats"),
   formListActiveChats: $("#formListActiveChats"),
   noActionSelected: $("#noActionSelected"),
@@ -55,6 +56,10 @@ const els = {
 
   // history
   historyList: $("#historyList"),
+
+  // settings
+  panelSettings: $("#panelSettings"),
+  btnClearAllRuns: $("#btnClearAllRuns"),
 };
 
 // ── Utility ───────────────────────────────────────────────────────────────
@@ -123,6 +128,7 @@ export function setActiveAction(actionId) {
 
 const formMap = {
   export_chat: "formExportChat",
+  export_meeting_transcript: "formExportMeetingTranscript",
   list_chats: "formListChats",
   list_active_chats: "formListActiveChats",
 };
@@ -132,10 +138,12 @@ export function showForm(actionId) {
   hide(els.panelProgress);
   hide(els.panelResults);
   hide(els.panelHistory);
+  hide(els.panelSettings);
   show(els.panelForms);
 
   // hide all forms
   hide(els.formExportChat);
+  hide(els.formExportMeetingTranscript);
   hide(els.formListChats);
   hide(els.formListActiveChats);
   hide(els.noActionSelected);
@@ -193,7 +201,16 @@ export function showHistoryPanel() {
   hide(els.panelForms);
   hide(els.panelProgress);
   hide(els.panelResults);
+  hide(els.panelSettings);
   show(els.panelHistory);
+}
+
+export function showSettingsPanel() {
+  hide(els.panelForms);
+  hide(els.panelProgress);
+  hide(els.panelResults);
+  hide(els.panelHistory);
+  show(els.panelSettings);
 }
 
 /**
@@ -217,15 +234,20 @@ export function readForm(formEl) {
  */
 export function buildParams(action, raw) {
   switch (action) {
-    case "export_chat":
+    case "export_chat": {
+      const ids = (raw.chat_ids || "")
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       return {
-        chat_id: raw.chat_id,
+        chat_ids: ids,
         since: raw.since,
         until: raw.until || null,
         format: raw.format || "json",
         exclude_system_messages: !!raw.exclude_system_messages,
         only_mine: !!raw.only_mine,
       };
+    }
     case "list_chats": {
       const topicInc = raw.topic_include
         ? raw.topic_include.split(",").map((s) => s.trim()).filter(Boolean)
@@ -240,6 +262,13 @@ export function buildParams(action, raw) {
         topic_exclude: topicExc,
       };
     }
+    case "export_meeting_transcript":
+      return {
+        identifier_type: raw.identifier_type || "join_web_url",
+        meeting_identifier: (raw.meeting_identifier || "").trim(),
+        transcript_id: raw.transcript_id ? raw.transcript_id.trim() : null,
+        format: raw.format || "txt",
+      };
     case "list_active_chats":
       return {
         min_activity_days: parseInt(raw.min_activity_days || "365", 10),
@@ -250,12 +279,74 @@ export function buildParams(action, raw) {
   }
 }
 
+/**
+ * Pre-populate a form from saved run params.
+ */
+export function populateForm(action, params) {
+  const formKey = formMap[action];
+  if (!formKey || !els[formKey]) return;
+  const formEl = els[formKey];
+
+  // Reset form first
+  formEl.reset();
+
+  if (!params) return;
+
+  switch (action) {
+    case "export_chat": {
+      const ta = formEl.querySelector('[name="chat_ids"]');
+      if (ta && params.chat_ids) ta.value = Array.isArray(params.chat_ids) ? params.chat_ids.join("\n") : params.chat_ids;
+      const since = formEl.querySelector('[name="since"]');
+      if (since && params.since) since.value = params.since;
+      const until = formEl.querySelector('[name="until"]');
+      if (until && params.until) until.value = params.until;
+      const fmt = formEl.querySelector('[name="format"]');
+      if (fmt && params.format) fmt.value = params.format;
+      const exSys = formEl.querySelector('[name="exclude_system_messages"]');
+      if (exSys) exSys.checked = !!params.exclude_system_messages;
+      const mine = formEl.querySelector('[name="only_mine"]');
+      if (mine) mine.checked = !!params.only_mine;
+      break;
+    }
+    case "list_chats": {
+      const ct = formEl.querySelector('[name="chat_type"]');
+      if (ct && params.chat_type) ct.value = params.chat_type;
+      const mp = formEl.querySelector('[name="max_participants"]');
+      if (mp && params.max_participants != null) mp.value = params.max_participants;
+      const ti = formEl.querySelector('[name="topic_include"]');
+      if (ti && params.topic_include) ti.value = Array.isArray(params.topic_include) ? params.topic_include.join(", ") : params.topic_include;
+      const te = formEl.querySelector('[name="topic_exclude"]');
+      if (te && params.topic_exclude) te.value = Array.isArray(params.topic_exclude) ? params.topic_exclude.join(", ") : params.topic_exclude;
+      break;
+    }
+    case "export_meeting_transcript": {
+      const it = formEl.querySelector('[name="identifier_type"]');
+      if (it && params.identifier_type) it.value = params.identifier_type;
+      const mi = formEl.querySelector('[name="meeting_identifier"]');
+      if (mi && params.meeting_identifier) mi.value = params.meeting_identifier;
+      const tid = formEl.querySelector('[name="transcript_id"]');
+      if (tid && params.transcript_id) tid.value = params.transcript_id;
+      const fmt = formEl.querySelector('[name="format"]');
+      if (fmt && params.format) fmt.value = params.format;
+      break;
+    }
+    case "list_active_chats": {
+      const mad = formEl.querySelector('[name="min_activity_days"]');
+      if (mad && params.min_activity_days != null) mad.value = params.min_activity_days;
+      const mmp = formEl.querySelector('[name="max_meeting_participants"]');
+      if (mmp && params.max_meeting_participants != null) mmp.value = params.max_meeting_participants;
+      break;
+    }
+  }
+}
+
 // ── Progress ──────────────────────────────────────────────────────────────
 
 export function showProgress(title) {
   hide(els.panelForms);
   hide(els.panelResults);
   hide(els.panelHistory);
+  hide(els.panelSettings);
   show(els.panelProgress);
   els.progressTitle.textContent = title || "Running…";
   els.progressBar.style.width = "0%";
@@ -280,17 +371,19 @@ let _sortCol = null;
 let _sortAsc = true;
 let _page = 0;
 const PAGE_SIZE = 25;
-
-export function showResults(summary, gridData, gridTotal, runId) {
+let _gridAction = null;
+export function showResults(summary, gridData, gridTotal, runId, action) {
   hide(els.panelForms);
   hide(els.panelProgress);
   hide(els.panelHistory);
+  hide(els.panelSettings);
   show(els.panelResults);
 
   // Summary cards
   _renderSummary(summary, gridTotal);
 
   // Grid
+  _gridAction = action || null;
   _gridData = gridData || [];
   _gridFiltered = [..._gridData];
   _gridColumns = _gridData.length > 0 ? Object.keys(_gridData[0]) : [];
@@ -342,9 +435,11 @@ function _summaryCard(label, value) {
 
 function _renderGrid() {
   // Detect chat_id column for row actions
-  const chatIdCol = _gridColumns.find(
-    (c) => c === "chat_id" || c === "ChatId" || c === "chatId"
-  );
+  const showActions = _gridAction === "list_chats" || _gridAction === "list_active_chats";
+  const chatIdCol = showActions
+    ? _gridColumns.find((c) => c === "chat_id" || c === "ChatId" || c === "chatId")
+    : null;
+  const colSpan = _gridColumns.length + (chatIdCol ? 1 : 0);
 
   // Header
   let headHtml = "<tr>";
@@ -363,7 +458,6 @@ function _renderGrid() {
   const start = _page * PAGE_SIZE;
   const pageData = _gridFiltered.slice(start, start + PAGE_SIZE);
 
-  const colSpan = chatIdCol ? _gridColumns.length + 1 : _gridColumns.length;
   let bodyHtml = "";
   if (pageData.length === 0) {
     bodyHtml = `<tr><td colspan="${colSpan}" style="text-align:center;padding:24px;color:var(--text-secondary)">No results</td></tr>`;
@@ -374,7 +468,6 @@ function _renderGrid() {
         let val = row[col];
         if (val == null) val = "";
         if (col === chatIdCol) {
-          // Render chat_id with copy icon
           bodyHtml += `<td title="${escapeHtml(String(val))}"><span class="chat-id-cell">${escapeHtml(String(val))}<button class="btn-icon btn-copy-id" data-copy-id="${escapeHtml(String(val))}" title="Copy Chat ID">📋</button></span></td>`;
         } else {
           bodyHtml += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
@@ -463,6 +556,7 @@ export function copyGridToClipboard() {
 
 const ACTION_LABELS = {
   export_chat: "Export Chat",
+  export_meeting_transcript: "Meeting Transcript",
   list_chats: "List Chats",
   list_active_chats: "Active Chats",
 };
@@ -491,6 +585,7 @@ export function renderHistory(runs) {
           <span class="status-badge ${statusClass}">${escapeHtml(r.status)}</span>
           ${r.status === "completed" ? `<button class="btn btn-sm btn-secondary" data-view-run="${r.run_id}" title="View in grid">👁</button>` : ""}
           ${r.status === "completed" ? `<button class="btn btn-sm btn-accent" data-dl-run="${r.run_id}" title="Download">⬇</button>` : ""}
+          <button class="btn-icon-danger" data-delete-run="${r.run_id}" title="Delete this run">✕</button>
         </div>
       </div>`;
   }
